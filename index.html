@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Work Cosmo | Access Control</title>
+        <style type="text/css" class="defined"></style>
+        <script src="https://cdn.tailwindcss.com"></script>
+        <script>
+            if (typeof tailwind !== "undefined") {
+                tailwind.config = {
+                    darkMode: "class",
+                    theme: {
+                        extend: {
+                            fontFamily: {
+                                sans: ["Plus Jakarta Sans", "sans-serif"]
+                            },
+                            colors: {
+                                primary: "#3b82f6",
+                                accent: "#ec4899",
+                                success: "#10b981",
+                                warning: "#f59e0b",
+                                danger: "#ef4444",
+                                surface: "#ffffff"
+                            },
+                            animation: {
+                                "fade-in": "fadeIn 0.4s ease-out both",
+                                "slide-up": "slideUp 0.4s ease-out both"
+                            },
+                            keyframes: {
+                                fadeIn: {
+                                    "0%": { opacity: "0" },
+                                    "100%": { opacity: "1" }
+                                },
+                                slideUp: {
+                                    "0%": { opacity: "0", transform: "translateY(20px)" },
+                                    "100%": { opacity: "1", transform: "translateY(0)" }
+                                }
+                            }
+                        }
+                    }
+                };
+            } else {
+                console.warn("Tailwind CSS CDN failed to load. Check your network or Content Security Policy.");
+            }
+        </script>
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+        <link
+            href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800;900&display=swap"
+            rel="stylesheet"
+        />
+        <style>
+            body {
+                background-color: #f8fafc;
+                background-image:
+                    radial-gradient(at 0% 0%, rgba(236, 72, 153, 0.15) 0px, transparent 50%),
+                    radial-gradient(at 100% 0%, rgba(59, 130, 246, 0.15) 0px, transparent 50%),
+                    radial-gradient(at 100% 100%, rgba(16, 185, 129, 0.1) 0px, transparent 50%);
+                background-attachment: fixed;
+                color: #0f172a;
+            }
+
+            /* Custom scrollbar for webkit */
+            ::-webkit-scrollbar {
+                width: 8px;
+                height: 8px;
+            }
+
+            ::-webkit-scrollbar-track {
+                background: transparent;
+            }
+
+            ::-webkit-scrollbar-thumb {
+                background: #cbd5e1;
+                border-radius: 4px;
+            }
+
+            ::-webkit-scrollbar-thumb:hover {
+                background: #94a3b8;
+            }
+        </style>
+    </head>
+
+    <body class="min-h-screen text-slate-800 antialiased selection:bg-pink-100 selection:text-pink-900">
+        <div id="app" class="min-h-screen flex items-center justify-center p-6">
+            <div
+                class="bg-white/70 backdrop-blur-xl border border-white/40 p-10 rounded-3xl shadow-2xl shadow-blue-900/5 text-center animate-slide-up max-w-sm w-full"
+            >
+                <div
+                    class="w-16 h-16 bg-gradient-to-br from-blue-500 to-pink-500 rounded-2xl flex items-center justify-center text-white text-2xl mx-auto mb-6 shadow-lg shadow-pink-500/20"
+                >
+                    <i class="fas fa-shield-halved"></i>
+                </div>
+                <h1 class="text-2xl font-black text-slate-900 mb-2">Work Cosmo</h1>
+                <p class="text-sm font-medium text-slate-500">Loading tenant controls...</p>
+            </div>
+        </div>
+
+        <script type="module" src="src/main.js"></script>
+    </body>
+</html>

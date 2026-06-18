@@ -1,0 +1,13 @@
+{
+  "name": "workcosmo-access-portal",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "live-server .",
+    "format": "npx prettier --write \"src/**/*.js\" \"*.html\""
+  },
+  "dependencies": {
+    "firebase": "^10.0.0"
+  }
+}
