@@ -938,12 +938,25 @@ function bindShellEvents() {
         toast("Data refreshed.");
     });
     document.getElementById("primaryAction")?.addEventListener("click", () => {
-        if (state.view === "emails") {
-            showEmailModal();
-            return;
+        switch (state.view) {
+            case "companies":
+                showCompanyModal();
+                break;
+            case "users":
+                showUserModal();
+                break;
+            case "billing":
+                showBillingModal();
+                break;
+            case "roles":
+                showRoleModal();
+                break;
+            case "emails":
+                showEmailModal();
+                break;
+            default:
+                break;
         }
-        document.querySelector("form input, form select")?.focus();
-        document.querySelector("form")?.scrollIntoView({ behavior: "smooth", block: "center" });
     });
 }
 
