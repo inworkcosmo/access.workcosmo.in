@@ -2313,65 +2313,156 @@ function showBillingRecordView(record) {
 }
 
 function downloadBillingInvoiceAsPdf(record) {
-    const escapePdf = (text) =>
-        String(text || "")
-            .replace(/\\/g, "\\\\")
-            .replace(/\(/g, "\\(")
-            .replace(/\)/g, "\\)")
-            .replace(/\r/g, "\\r")
-            .replace(/\n/g, "\\n");
+    const companyLabel = escapeHtml(companyName(record.companyId));
+    const invoiceDate = formatDate(record.invoiceDate);
+    const dueDate = formatDate(record.dueDate);
+    const statusLabel = escapeHtml(record.status || "pending");
+    const typeLabel = escapeHtml(record.type || "invoice");
+    const amountLabel = inr.format(record.amount || 0);
+    const description = escapeHtml(record.description || "Service fee") + ".";
 
-    const lines = [
-        `Work Cosmo Invoice`,
-        `Invoice ID: ${record.id}`,
-        `Date: ${formatDate(record.invoiceDate)}`,
-        `Company: ${companyName(record.companyId)}`,
-        `Type: ${record.type || "invoice"}`,
-        `Status: ${record.status || "pending"}`,
-        `Description: ${record.description || "-"}`,
-        `Invoice Date: ${formatDate(record.invoiceDate)}`,
-        `Due Date: ${formatDate(record.dueDate)}`,
-        `Amount: ${inr.format(record.amount || 0)}`
-    ];
+    const invoiceHtml = `<!doctype html>
+    <html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <title>Invoice ${record.id}</title>
+        <style>
+            body { margin: 0; padding: 0; background: #f4f6fb; font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: #0f172a; }
+            .page { width: 100%; min-height: 100vh; padding: 40px; box-sizing: border-box; }
+            .invoice-shell { max-width: 900px; margin: auto; background: #ffffff; border-radius: 28px; overflow: hidden; box-shadow: 0 30px 80px rgba(15, 23, 42, 0.12); }
+            .brand-bar { display: flex; align-items: center; justify-content: space-between; gap: 24px; padding: 32px 40px; background: linear-gradient(135deg, #3b82f6 0%, #ec4899 100%); color: #ffffff; }
+            .brand-bar .brand { display: flex; align-items: center; gap: 16px; }
+            .brand-icon { width: 52px; height: 52px; border-radius: 18px; background: rgba(255,255,255,0.2); display: grid; place-items: center; font-size: 1.35rem; font-weight: 800; }
+            .brand-title { font-size: 1.25rem; font-weight: 800; letter-spacing: -0.03em; margin: 0; }
+            .brand-subtitle { margin: 4px 0 0; color: rgba(255,255,255,0.85); font-size: 0.95rem; }
+            .headline { display: grid; grid-template-columns: 1fr auto; gap: 24px; padding: 32px 40px; }
+            .headline h1 { margin: 0; font-size: 2rem; letter-spacing: -0.04em; }
+            .headline p { margin: 8px 0 0; color: #475569; }
+            .meta-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; margin-top: 24px; }
+            .meta-card { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 20px; padding: 20px; }
+            .meta-card span { display: block; color: #94a3b8; font-size: 0.78rem; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 8px; }
+            .meta-card strong { display: block; font-size: 1.05rem; color: #0f172a; }
+            .invoice-content { padding: 0 40px 40px; }
+            .section { margin-bottom: 28px; }
+            .section-title { display: flex; justify-content: space-between; align-items: center; margin-bottom: 18px; }
+            .section-title h2 { margin: 0; font-size: 1rem; letter-spacing: 0.05em; text-transform: uppercase; color: #475569; }
+            .badge { display: inline-flex; align-items: center; justify-content: center; border-radius: 999px; padding: 8px 14px; font-size: 0.78rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; }
+            .badge.pending { background: #f8fafc; color: #2563eb; }
+            .badge.paid { background: #ecfdf5; color: #047857; }
+            .badge.overdue { background: #fee2e2; color: #b91c1c; }
+            .badge.cancelled { background: #f8fafc; color: #6b7280; }
+            .table { width: 100%; border-collapse: collapse; }
+            .table th, .table td { padding: 18px 16px; text-align: left; }
+            .table thead th { color: #64748b; font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.08em; border-bottom: 1px solid #e2e8f0; }
+            .table tbody tr { border-bottom: 1px solid #e2e8f0; }
+            .table tbody tr:last-child { border-bottom: none; }
+            .table td.description { color: #334155; }
+            .table td.amount { font-weight: 800; color: #0f172a; }
+            .total-row td { border-top: 2px solid #e2e8f0; }
+            .footer { padding: 0 40px 40px; color: #64748b; font-size: 0.92rem; line-height: 1.7; }
+            .footer .note { margin-top: 12px; }
+            .logo-line { color: #ffffff; opacity: 0.9; font-size: 0.9rem; }
+        </style>
+    </head>
+    <body>
+        <div class="page">
+            <div class="invoice-shell">
+                <div class="brand-bar">
+                    <div class="brand">
+                        <div class="brand-icon">WC</div>
+                        <div>
+                            <div class="brand-title">Work Cosmo</div>
+                            <div class="brand-subtitle">Access Control Billing Center</div>
+                        </div>
+                    </div>
+                    <div class="logo-line">www.workcosmo.in</div>
+                </div>
+                <div class="headline">
+                    <div>
+                        <h1>Invoice</h1>
+                        <p>Professional invoice generated for manual billing and payment tracking.</p>
+                    </div>
+                    <div class="badge ${record.status || "pending"}">${statusLabel}</div>
+                </div>
+                <div class="invoice-content">
+                    <div class="meta-grid">
+                        <div class="meta-card">
+                            <span>Invoice Number</span>
+                            <strong>${escapeHtml(record.id)}</strong>
+                        </div>
+                        <div class="meta-card">
+                            <span>Invoice Date</span>
+                            <strong>${invoiceDate}</strong>
+                        </div>
+                        <div class="meta-card">
+                            <span>Due Date</span>
+                            <strong>${dueDate}</strong>
+                        </div>
+                        <div class="meta-card">
+                            <span>Type</span>
+                            <strong>${typeLabel}</strong>
+                        </div>
+                    </div>
 
-    const textStream = [`BT`, `/F1 12 Tf`, `50 760 Td`, `(${escapePdf(lines[0])}) Tj`]
-        .concat(lines.slice(1).map((line) => `T* (${escapePdf(line)}) Tj`))
-        .concat([`ET`])
-        .join("\n");
+                    <div class="section">
+                        <div class="section-title">
+                            <h2>Billed To</h2>
+                        </div>
+                        <div style="display:flex; align-items:flex-start; gap:24px;">
+                            <div>
+                                <div style="font-weight: 700; color: #0f172a; font-size: 1rem;">${companyLabel}</div>
+                                <div style="margin-top: 8px; color: #475569;">Billing entry generated from the access control dashboard.</div>
+                            </div>
+                            <div style="min-width: 220px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 18px; padding: 16px;">
+                                <div style="font-size: 0.72rem; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 10px;">Invoice Summary</div>
+                                <div style="font-size: 1.8rem; font-weight: 800; color: #0f172a;">${amountLabel}</div>
+                                <div style="margin-top: 8px; color: #475569;">Due by ${dueDate}</div>
+                            </div>
+                        </div>
+                    </div>
 
-    const stream = `${textStream}\n`;
-    const objects = [
-        `1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n`,
-        `2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n`,
-        `3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>\nendobj\n`,
-        `4 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>\nendobj\n`,
-        `5 0 obj\n<< /Length ${stream.length} >>\nstream\n${stream}endstream\nendobj\n`
-    ];
+                    <div class="section">
+                        <div class="section-title">
+                            <h2>Details</h2>
+                        </div>
+                        <table class="table">
+                            <thead>
+                                <tr>
+                                    <th>Description</th>
+                                    <th>Amount</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td class="description">${description}</td>
+                                    <td class="amount">${amountLabel}</td>
+                                </tr>
+                                <tr class="total-row">
+                                    <td style="font-weight:700;">Total</td>
+                                    <td class="amount">${amountLabel}</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                <div class="footer">
+                    <div>Thank you for choosing Work Cosmo. If you have any questions about this invoice, reach out to support@workcosmo.in.</div>
+                    <div class="note">Please retain this document for your records.</div>
+                </div>
+            </div>
+        </div>
+    </body>
+    </html>`;
 
-    let offset = 0;
-    const header = `%PDF-1.3\n`;
-    const body = objects.join("");
-    const xrefStart = header.length + body.length;
-    const xrefEntries = [
-        `0000000000 65535 f \n`,
-        ...objects.map((object, index) => {
-            const entry = String(offset).padStart(10, "0") + " 00000 n \n";
-            offset += object.length;
-            return entry;
-        })
-    ].join("");
+    const printWindow = window.open("", "_blank", "noopener,noreferrer");
+    if (!printWindow) {
+        toast("Popup blocked. Allow popups to view invoice.", true);
+        return;
+    }
 
-    const pdf = `${header}${body}xref\n0 ${objects.length + 1}\n${xrefEntries}trailer << /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xrefStart}\n%%EOF`;
-    const pdfBlob = new Blob([pdf], { type: "application/pdf" });
-    const url = URL.createObjectURL(pdfBlob);
-    const anchor = document.createElement("a");
-    anchor.href = url;
-    anchor.download = `invoice-${record.id || Date.now()}.pdf`;
-    document.body.appendChild(anchor);
-    anchor.click();
-    anchor.remove();
-    URL.revokeObjectURL(url);
-    toast("Invoice PDF generated.");
+    printWindow.document.write(invoiceHtml);
+    printWindow.document.close();
+    printWindow.focus();
 }
 
 function showRoleModal() {
