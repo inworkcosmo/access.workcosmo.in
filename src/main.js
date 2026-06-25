@@ -2182,7 +2182,7 @@ function showBillingModal() {
                 <label for="billingCompanyId" class="text-sm font-bold text-slate-700">Company</label>
                 <select id="billingCompanyId" required class="w-full min-h-[42px] px-3 py-2 bg-white border border-slate-200 rounded-xl text-slate-900 outline-none focus:border-pink-500 focus:ring-4 focus:ring-pink-500/10 transition-all">
                     <option value="">Select company</option>
-                    \${state.companies.map((company) => \`<option value="\${company.id}">\${escapeHtml(company.companyName)}</option>\`).join("")}
+                    ${state.companies.map((company) => `<option value="${company.id}">${escapeHtml(company.companyName)}</option>`).join("")}
                 </select>
             </div>
             <div class="grid gap-1.5">
