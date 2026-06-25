@@ -1,48 +1,44 @@
-import { PLAN_CATALOG, resolvePlanLimits } from "../config/plans.js";
 import { getRole } from "../config/rbac.js";
-import { atomicCreateCompany, createRecord, listByCompany, setRecord, updateRecord } from "./firestoreService.js";
+import { atomicCreateCompany, listByCompany, setRecord, updateRecord } from "./firestoreService.js";
 import { canAddUser } from "./accessControlService.js";
 
-export async function createCompanyWorkspace(subscription, input) {
-    const limits = resolvePlanLimits(subscription);
+export async function createCompanyWorkspace(input) {
+    const companyId = input.companyId || crypto.randomUUID();
     const ownerId = input.ownerId || crypto.randomUUID();
 
     return atomicCreateCompany({
-        subscriptionId: subscription.id,
         company: {
-            companyId: input.companyId,
-            clientId: input.companyId,
-            subdomain: input.companyId,
+            companyId,
+            clientId: companyId,
+            subdomain: companyId,
             companyName: input.companyName,
             ownerId,
-            subscriptionId: subscription.id,
-            plan: subscription.plan || PLAN_CATALOG.starter.id,
-            maxUsers: limits.maxUsers,
-            aiCreditsRemaining: Number(subscription.aiCreditsRemaining || subscription.aiCreditsIncluded || 0),
+            userLimit: Number(input.userLimit || 1),
+            aiCredits: Number(input.aiCredits || 0),
+            jobPostingCredits: Number(input.jobPostingCredits || 0),
+            pricing: input.pricing || "",
+            billingCycle: input.billingCycle || "monthly",
             status: "active",
-            features: limits.features,
             modulesEnabled: {
                 hire: true,
-                learn: false,
                 core: true,
-                perform: true,
-                ai: false
-            },
-            customLimits: subscription.customLimits || {}
+                perform: true
+            }
         },
         owner: {
             userId: ownerId,
             name: input.ownerName,
             email: input.ownerEmail.toLowerCase(),
-            role: "owner",
+            role: "admin",
             status: "active",
-            inviteStatus: "accepted"
+            inviteStatus: "accepted",
+            companyId
         }
     });
 }
 
-export async function inviteUser({ company, subscription, activeUserCount, userId, name, email, role }) {
-    const check = canAddUser(company, subscription, activeUserCount);
+export async function inviteUser({ company, activeUserCount, userId, name, email, role }) {
+    const check = canAddUser(company, activeUserCount);
     if (!check.allowed) throw new Error(check.reason);
 
     return setRecord("users", userId, {

@@ -84,12 +84,11 @@ export async function deleteRecord(path, id) {
     await deleteDoc(doc(db, path, id));
 }
 
-export async function atomicCreateCompany({ company, owner, subscriptionId }) {
+export async function atomicCreateCompany({ company, owner }) {
     return runTransaction(db, async (transaction) => {
         const cid = company.companyId || doc(collection(db, "companies")).id;
         const companyRef = doc(db, "companies", cid);
         const ownerRef = doc(db, "users", owner.userId);
-        const subscriptionRef = doc(db, "subscriptions", subscriptionId);
         const existingCompany = await transaction.get(companyRef);
         if (existingCompany.exists()) {
             throw new Error(`Client ID "${cid}" is already in use.`);
@@ -106,11 +105,6 @@ export async function atomicCreateCompany({ company, owner, subscriptionId }) {
             ...owner,
             companyId: cid,
             createdAt: serverTimestamp(),
-            updatedAt: serverTimestamp()
-        });
-
-        transaction.update(subscriptionRef, {
-            companyId: cid,
             updatedAt: serverTimestamp()
         });
 

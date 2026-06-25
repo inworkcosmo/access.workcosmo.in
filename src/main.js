@@ -1,10 +1,7 @@
-import { PLAN_CATALOG, FEATURES, resolvePlanLimits } from "./config/plans.js";
-import { PERMISSIONS, ROLE_DEFINITIONS, registerDynamicRoles, getAllRoles, DYNAMIC_ROLES } from "./config/rbac.js";
+import { PERMISSIONS, ROLE_DEFINITIONS, getAllRoles } from "./config/rbac.js";
 import {
     canAccessModule,
     canAddUser,
-    getBlockedReason,
-    hasFeature,
     hasPermission
 } from "./services/accessControlService.js";
 import { watchAuth, login, logout, loadAccessSession } from "./services/authService.js";
@@ -19,14 +16,14 @@ import {
     listByCompany
 } from "./services/firestoreService.js";
 import {
-    createSubscription,
-    upgradePlan,
-    scheduleDowngrade,
-    cancelSubscription
-} from "./services/subscriptionService.js";
+    createBillingRecord,
+    listBillingRecords,
+    updateBillingRecord,
+    deleteBillingRecord
+} from "./services/billingService.js";
 import { escapeHtml, formatDate, formatDateTime, inr, initials, percent } from "./utils/format.js";
 import { toast } from "./utils/toast.js";
-import { createCustomRole, updateCustomRole } from "./services/roleService.js";
+import { listSystemRoles } from "./services/roleService.js";
 import { secondaryAuth } from "./services/firebase.js";
 import { createUserWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 import { openModal } from "./components/modal.js";
@@ -38,63 +35,61 @@ const views = {
         icon: "fa-gauge-high",
         label: "Overview",
         title: "Owner Control Center",
-        subtitle: "Review paid purchase requests, confirm payment, and manually provision customer access."
-    },
-    requests: {
-        icon: "fa-inbox",
-        label: "Purchase Requests",
-        title: "Payment Requests",
-        subtitle:
-            "Confirm paid Razorpay subscriptions, then create the subscription, company, owner user, and access pass."
+        subtitle: "Review system status, user usage, recent leads, and manual billing metrics."
     },
     companies: {
         icon: "fa-building-shield",
         label: "Companies",
         title: "Company Workspaces",
-        subtitle: "Every subscription provisions one isolated company workspace."
+        subtitle: "Manually provision and configure client tenant workspaces."
     },
     users: {
         icon: "fa-users-gear",
         label: "Users",
         title: "User Management",
-        subtitle: "Invite users, enforce plan limits, and assign RBAC roles."
+        subtitle: "Invite company users, enforce limits, and manage authentication accounts."
     },
     roles: {
         icon: "fa-user-lock",
         label: "Roles",
         title: "Roles & Permissions",
-        subtitle: "System roles map directly to reusable permission helpers."
+        subtitle: "Fixed authorization profiles and permissions matrix for Work Cosmo."
     },
-    subscriptions: {
-        icon: "fa-credit-card",
-        label: "Subscriptions",
-        title: "Manual Subscription Control",
-        subtitle: "You control plan status, upgrades, downgrades, cancellations, trial, grace, and suspension."
+    billing: {
+        icon: "fa-file-invoice",
+        label: "Billing",
+        title: "Billing Ledger",
+        subtitle: "Create, view, and manage invoices and payment records for client workspaces."
+    },
+    contacts: {
+        icon: "fa-address-book",
+        label: "Contacts",
+        title: "Website Leads",
+        subtitle: "Review website contact form submissions and CTA requests."
     },
     emails: {
         icon: "fa-envelope",
-        label: "Email Management",
+        label: "Emails",
         title: "Email Management",
-        subtitle: "Manage shared email credentials and assigned mailboxes for your access portal."
+        subtitle: "Manage shared email credentials and assigned mailboxes for client portals."
     }
 };
 
 let state = {
     view: "overview",
     session: null,
-    subscriptions: [],
-    purchaseRequests: [],
-    accessPasses: [],
     companies: [],
     users: [],
-    roles: [],
-    permissions: [],
     emails: [],
+    billingRecords: [],
+    contactMessages: [],
     emailSearch: "",
     userSearch: "",
     userCompanyFilter: "",
     userRoleFilter: "",
-    editingRoleId: null
+    billingCompanyFilter: "",
+    contactStatusFilter: "",
+    contactSearch: ""
 };
 
 document.addEventListener("DOMContentLoaded", () => {
@@ -114,52 +109,21 @@ document.addEventListener("DOMContentLoaded", () => {
 });
 
 async function loadData() {
-    const [subscriptions, accessPasses, companies, users, roles, permissions, emails] = await Promise.all([
-        safeList("subscriptions"),
-        safeList("accessPasses"),
+    const [companies, users, emails, billingRecords, contactMessages] = await Promise.all([
         safeList("companies"),
         safeList("users"),
-        safeList("roles"),
-        safeList("permissions"),
-        safeList("emails")
+        safeList("emails"),
+        safeList("billingRecords"),
+        safeList("contact_messages")
     ]);
-
-    // Map unprovisioned subscriptions to state.purchaseRequests so we don't have to rewrite the HTML rendering code or views!
-    const purchaseRequests = subscriptions
-        .filter((sub) => !sub.companyId)
-        .map((sub) => {
-            let mappedPlan = "starter";
-            if (sub.plan_id === "plan_SoAKfnYYCTZHDo") mappedPlan = "professional";
-            if (sub.plan_id === "plan_SouJvWzj8xFSgg") mappedPlan = "enterprise";
-            if (sub.plan) mappedPlan = sub.plan; // fallback if already standard
-
-            return {
-                id: sub.id,
-                buyerName: sub.name || "Unknown Buyer",
-                buyerEmail: sub.email || "no-email@test.com",
-                companyName: sub.company || `${sub.name || "Customer"} Workspace`,
-                mobile: sub.mobile || "",
-                plan: mappedPlan,
-                planName: sub.plan_name || planName(mappedPlan),
-                status: sub.status || "active",
-                provisioningStatus: sub.companyId ? "completed" : "pending",
-                createdAt: sub.created_at || new Date().toISOString(),
-                updatedAt: sub.created_at || new Date().toISOString(),
-                razorpaySubscriptionId: sub.subscription_id || sub.id,
-                razorpayPlanId: sub.plan_id || ""
-            };
-        });
 
     state = {
         ...state,
-        subscriptions,
-        purchaseRequests,
-        accessPasses,
         companies,
         users,
-        roles,
-        permissions,
-        emails
+        emails,
+        billingRecords,
+        contactMessages
     };
 
     // Add utility to window to fix misaligned user IDs
@@ -179,15 +143,6 @@ async function loadData() {
             alert("No misaligned users found.");
         }
     };
-
-    console.log("ALL FIREBASE USERS IN FIRESTORE:", users);
-    const chandan = users.find((u) => u.email && u.email.toLowerCase().includes("chandan"));
-    if (chandan) {
-        console.log("FOUND CHANDAN USER DOCUMENT IN FIRESTORE:", JSON.stringify(chandan, null, 2));
-    } else {
-        console.log("CHANDAN USER DOCUMENT NOT FOUND IN FIRESTORE!");
-    }
-    registerDynamicRoles(roles);
 }
 
 async function safeList(path) {
@@ -334,16 +289,16 @@ function renderExpired() {
 
 function renderView() {
     switch (state.view) {
-        case "requests":
-            return renderPurchaseRequests();
         case "companies":
             return renderCompanies();
         case "users":
             return renderUsers();
         case "roles":
             return renderRoles();
-        case "subscriptions":
-            return renderSubscriptions();
+        case "billing":
+            return renderBilling();
+        case "contacts":
+            return renderContacts();
         case "emails":
             return renderEmails();
         default:
@@ -352,48 +307,55 @@ function renderView() {
 }
 
 function renderOverview() {
-    const paidRequests = state.purchaseRequests.filter((request) => request.status === "payment_received").length;
-    const pendingProvisioning = state.purchaseRequests.filter(
-        (request) => request.provisioningStatus !== "completed"
-    ).length;
-    const activeSubscriptions = state.subscriptions.filter((sub) =>
-        ["active", "trialing", "grace"].includes(sub.status)
-    ).length;
-    const activeCompanies = state.companies.filter((company) => company.status === "active").length;
-    const totalRemainingCredits = state.companies.reduce((acc, c) => acc + Number(c.aiCreditsRemaining || 0), 0);
+    const totalCompanies = state.companies.length;
+    const totalUsers = state.users.length;
+    const totalAiCredits = state.companies.reduce((acc, c) => acc + Number(c.aiCredits || 0), 0);
+    const totalJobCredits = state.companies.reduce((acc, c) => acc + Number(c.jobPostingCredits || 0), 0);
+    const totalLeads = state.contactMessages.length;
+    const overdueBills = state.billingRecords.filter((r) => r.status === "overdue").length;
+
+    // Get recent contact form leads (first 5)
+    const recentLeads = [...state.contactMessages]
+        .sort((a, b) => {
+            const dateA = a.timestamp?.seconds ? new Date(a.timestamp.seconds * 1000) : new Date(a.timestamp || 0);
+            const dateB = b.timestamp?.seconds ? new Date(b.timestamp.seconds * 1000) : new Date(b.timestamp || 0);
+            return dateB - dateA;
+        })
+        .slice(0, 5);
 
     return `
         <div class="grid gap-8">
             <!-- Hero Stats -->
-            <section class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 gap-6">
-                ${metric("Paid Requests", paidRequests, "fa-receipt", "blue")}
-                ${metric("Pending Setup", pendingProvisioning, "fa-hourglass-half", "amber")}
-                ${metric("Active Subs", activeSubscriptions, "fa-credit-card", "indigo")}
-                ${metric("Companies", activeCompanies, "fa-building", "emerald")}
-                ${metric("Total AI Credits", totalRemainingCredits.toLocaleString("en-IN"), "fa-coins", "rose")}
+            <section class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-6">
+                ${metric("Companies", totalCompanies, "fa-building", "emerald")}
+                ${metric("Total Users", totalUsers, "fa-users", "blue")}
+                ${metric("AI Credits", totalAiCredits.toLocaleString("en-IN"), "fa-coins", "rose")}
+                ${metric("Job Credits", totalJobCredits.toLocaleString("en-IN"), "fa-briefcase", "indigo")}
+                ${metric("Website Leads", totalLeads, "fa-address-book", "amber")}
+                ${metric("Overdue Bills", overdueBills, "fa-file-invoice", "rose")}
             </section>
 
             <div class="grid grid-cols-1 lg:grid-cols-[2fr_1fr] gap-8">
                 <div class="grid gap-8">
-                    <!-- Provisioning Queue -->
-                    <div class="bg-white/70 backdrop-blur-xl border border-white/50 rounded-3xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] overflow-hidden">
+                    <!-- Recent Website Leads -->
+                    <div class="bg-white/70 backdrop-blur-xl border border-slate-200 rounded-3xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] overflow-hidden">
                         <div class="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
                             <div>
-                                <h3 class="text-lg font-black text-slate-800">Provisioning Queue</h3>
-                                <p class="text-xs text-slate-500 font-medium">Awaiting owner activation</p>
+                                <h3 class="text-lg font-black text-slate-800">Recent Website Leads</h3>
+                                <p class="text-xs text-slate-500 font-medium">Latest submissions from contact-form</p>
                             </div>
-                            ${badge(pendingProvisioning + " Pending", "warning")}
+                            ${badge(recentLeads.length + " Recent", "info")}
                         </div>
                         <div class="p-0 overflow-x-auto">
-                            ${purchaseRequestTable(state.purchaseRequests.slice(0, 6), true)}
+                            ${recentLeadsTable(recentLeads)}
                         </div>
                     </div>
                 </div>
                 <div class="grid gap-8 items-start">
                     <!-- Usage Stats -->
-                    <div class="bg-white/70 backdrop-blur-xl border border-white/50 rounded-3xl shadow-[0_8px_30px_rgb(0,0,0,0.04)]">
+                    <div class="bg-white/70 backdrop-blur-xl border border-slate-200 rounded-3xl shadow-[0_8px_30px_rgb(0,0,0,0.04)]">
                         <div class="p-6 border-b border-slate-100 bg-slate-50/50">
-                            <h3 class="text-lg font-black text-slate-800">Plan Usage</h3>
+                            <h3 class="text-lg font-black text-slate-800">Workspace User Limits</h3>
                             <p class="text-xs text-slate-500 font-medium">Tenant resource consumption</p>
                         </div>
                         <div class="p-6">
@@ -406,56 +368,41 @@ function renderOverview() {
     `;
 }
 
-function renderPurchaseRequests() {
-    const openRequests = state.purchaseRequests.filter((request) => request.provisioningStatus !== "completed");
-    const completedRequests = state.purchaseRequests.filter((request) => request.provisioningStatus === "completed");
-
+function recentLeadsTable(leads) {
+    if (!leads.length) return empty("No website leads found.");
     return `
-        <div class="grid">
-            <section class="grid grid-cols-1 lg:grid-cols-[1.2fr_1fr] gap-8 items-center p-8 bg-gradient-to-br from-white/90 to-white/50 backdrop-blur-xl border border-slate-200 rounded-3xl shadow-xl shadow-slate-200/50 mb-8">
-                <div>
-                    <p class="text-xs font-black tracking-widest uppercase text-pink-500 mb-2">Manual confirmation workflow</p>
-                    <h2 class="text-3xl font-black text-slate-900 mb-4">Confirm payment, then provision access.</h2>
-                    <p class="text-slate-600 text-sm font-medium">Use this queue after a buyer completes Razorpay checkout. The button creates the subscription, company, owner user profile, and access pass in Firestore.</p>
-                </div>
-                <div class="grid gap-2.5">
-                    ${domainItem("1. Buyer login", "Firebase Auth account from public checkout")}
-                    ${domainItem("2. Razorpay", "Subscription created and linked to a purchase request")}
-                    ${domainItem("3. Owner review", "You confirm payment in this portal")}
-                    ${domainItem("4. Access pass", "SaaS login details are created after provisioning")}
-                </div>
-            </section>
-            <section class="grid grid-cols-1 xl:grid-cols-[1fr_1fr] gap-8">
-                <div class="bg-white/90 backdrop-blur-lg border border-slate-200 rounded-2xl p-6 shadow-lg shadow-slate-200/40">
-                    <div class="flex justify-between items-start gap-4 mb-4">
-                        <div>
-                            <h3 class="text-lg font-black text-slate-800">Needs Owner Action</h3>
-                            <p class="text-slate-500 text-sm font-medium">${openRequests.length} request${openRequests.length === 1 ? "" : "s"} waiting for review.</p>
-                        </div>
-                    </div>
-                    ${purchaseRequestTable(openRequests)}
-                </div>
-                <div class="bg-white/90 backdrop-blur-lg border border-slate-200 rounded-2xl p-6 shadow-lg shadow-slate-200/40">
-                    <div class="flex justify-between items-start gap-4 mb-4">
-                        <div>
-                            <h3 class="text-lg font-black text-slate-800">Provisioned</h3>
-                            <p class="text-slate-500 text-sm font-medium">${completedRequests.length} completed customer setup${completedRequests.length === 1 ? "" : "s"}.</p>
-                        </div>
-                    </div>
-                    ${purchaseRequestTable(completedRequests, true)}
-                </div>
-            </section>
+        <div class="table-wrap">
+            <table class="w-full text-left">
+                <thead>
+                    <tr class="border-b border-slate-200 text-[10px] font-black uppercase tracking-widest text-slate-500">
+                        <th class="px-6 py-4">Name</th>
+                        <th class="px-6 py-4">Email</th>
+                        <th class="px-6 py-4">Company Size</th>
+                        <th class="px-6 py-4">Date</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-100">
+                    ${leads.map(lead => {
+                        const date = lead.timestamp?.seconds ? new Date(lead.timestamp.seconds * 1000) : new Date(lead.timestamp || 0);
+                        return `
+                            <tr class="hover:bg-slate-50 transition-colors">
+                                <td class="px-6 py-4 font-bold text-slate-800">${escapeHtml(lead.name || "Anonymous")}</td>
+                                <td class="px-6 py-4 text-xs font-semibold text-slate-600">${escapeHtml(lead.email || "")}</td>
+                                <td class="px-6 py-4">${badge(lead.company_size || "Unknown", "soft")}</td>
+                                <td class="px-6 py-4 text-xs font-medium text-slate-500">${formatDateTime(date)}</td>
+                            </tr>
+                        `;
+                    }).join("")}
+                </tbody>
+            </table>
         </div>
     `;
 }
 
 function renderCompanies() {
-    const availableSubscriptions = state.subscriptions.filter(
-        (sub) => !sub.companyId && ["active", "trialing", "grace"].includes(sub.status)
-    );
     return `
         <div class="grid gap-8">
-            <div class="bg-white/90 backdrop-blur-lg border border-slate-200 rounded-2xl p-6 shadow-lg shadow-slate-200/40">
+            <div class="bg-white/90 backdrop-blur-lg border border-slate-200 rounded-3xl p-6 shadow-lg shadow-slate-200/40">
                 <div class="flex justify-between items-start gap-4 mb-4">
                     <div>
                         <h3 class="text-lg font-black text-slate-800">Managed Companies</h3>
@@ -563,7 +510,7 @@ function renderRoles() {
     const totalRoles = roles.length;
     const totalPermissions = permissions.length;
     const assignedUsers = state.users.filter((u) => u.role).length;
-    const ownersAndAdmins = state.users.filter((u) => u.role === "owner" || u.role === "admin").length;
+    const adminsCount = state.users.filter((u) => u.role === "admin").length;
 
     return `
         <div class="space-y-8 animate-fade-in">
@@ -572,7 +519,7 @@ function renderRoles() {
                 ${metric("System Roles", totalRoles, "fa-user-lock", "indigo")}
                 ${metric("Ecosystem Scopes", totalPermissions, "fa-key", "blue")}
                 ${metric("Assigned Users", assignedUsers, "fa-users-gear", "emerald")}
-                ${metric("Superusers", ownersAndAdmins, "fa-user-shield", "rose")}
+                ${metric("Admins", adminsCount, "fa-user-shield", "rose")}
             </section>
 
             <!-- RBAC Matrix -->
@@ -632,7 +579,7 @@ function renderRoles() {
             </div>
 
             <!-- Lower Action Row -->
-            <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 items-start">
+            <div class="grid grid-cols-1 gap-8 items-start max-w-xl">
                 <!-- Role Assignment -->
                 <div class="bg-white/90 backdrop-blur-lg border border-slate-200 rounded-3xl p-6 shadow-lg shadow-slate-200/40">
                     <div class="border-b border-slate-100 pb-4 mb-5">
@@ -655,14 +602,14 @@ function renderRoles() {
 
                         <div class="grid gap-1.5">
                             <label class="text-xs font-black text-slate-500 uppercase tracking-widest">Target Role</label>
-                            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
                                 ${roles
             .map(
                 (role) => `
                                     <label class="relative flex flex-col p-4 rounded-xl border border-slate-200 bg-slate-50/50 cursor-pointer hover:border-pink-300 hover:bg-white hover:shadow-md transition-all has-[:checked]:border-pink-500 has-[:checked]:bg-white has-[:checked]:ring-4 has-[:checked]:ring-pink-500/10">
                                         <input type="radio" name="roleValue" value="${role.id}" class="sr-only" required>
                                         <span class="text-sm font-bold text-slate-800">${role.label}</span>
-                                        <span class="text-[10px] text-slate-500 font-medium mt-1">${role.permissions.length} Ecosystem permissions</span>
+                                        <span class="text-[10px] text-slate-500 font-medium mt-1">${role.permissions.length} Scopes</span>
                                     </label>
                                 `
             )
@@ -675,109 +622,113 @@ function renderRoles() {
                         </button>
                     </form>
                 </div>
+            </div>
+        </div>
+    `;
+}
 
-                <!-- Custom Roles Management -->
-                <div class="bg-white/90 backdrop-blur-lg border border-slate-200 rounded-3xl p-6 shadow-lg shadow-slate-200/40">
-                    <div class="border-b border-slate-100 pb-4 mb-5 flex justify-between items-center">
-                        <div>
-                            <h3 class="text-lg font-black text-slate-800">${state.editingRoleId ? "Edit Custom Role" : "Create Custom Role"}</h3>
-                            <p class="text-slate-500 text-sm font-medium">Define custom privileges and access scopes</p>
-                        </div>
-                        ${state.editingRoleId ? `<button id="btnCancelRoleEdit" class="text-xs font-bold text-slate-500 hover:text-slate-800"><i class="fas fa-xmark"></i> Cancel</button>` : ""}
+function renderBilling() {
+    const totalInvoices = state.billingRecords.length;
+    const paidInvoices = state.billingRecords.filter(r => r.status === 'paid').length;
+    const overdueInvoices = state.billingRecords.filter(r => r.status === 'overdue').length;
+    const totalAmount = state.billingRecords.reduce((acc, r) => acc + Number(r.amount || 0), 0);
+
+    const filtered = state.billingRecords.filter(record => {
+        const companyFilter = state.billingCompanyFilter || "";
+        return !companyFilter || record.companyId === companyFilter;
+    });
+
+    return `
+        <div class="grid gap-8">
+            <section class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                ${metric("Total Invoices", totalInvoices, "fa-file-invoice", "blue")}
+                ${metric("Paid", paidInvoices, "fa-check-double", "emerald")}
+                ${metric("Overdue", overdueInvoices, "fa-triangle-exclamation", "rose")}
+                ${metric("Total Volume", inr.format(totalAmount), "fa-indian-rupee-sign", "indigo")}
+            </section>
+
+            <div class="bg-white/90 backdrop-blur-lg border border-slate-200 rounded-3xl p-6 shadow-lg shadow-slate-200/40">
+                <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4 border-b border-slate-100 pb-5">
+                    <div>
+                        <h3 class="text-xl font-black text-slate-800">Billing Ledger</h3>
+                        <p class="text-slate-500 text-sm font-medium">Manage manual invoices and payment records.</p>
                     </div>
-
-                    <form id="customRoleForm" class="space-y-4">
-                        <div class="grid gap-1.5">
-                            <label class="text-xs font-black text-slate-500 uppercase tracking-widest">Role Name / Label</label>
-                            <input id="customRoleLabel" type="text" required placeholder="e.g. Recruitment Lead" class="w-full min-h-[42px] px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 outline-none focus:border-pink-500 focus:ring-4 focus:ring-pink-500/10 transition-all text-sm" />
-                        </div>
-
-                        <div class="grid gap-1.5">
-                            <label class="text-xs font-black text-slate-500 uppercase tracking-widest">Access Selector (Permissions)</label>
-                            <div class="grid grid-cols-2 gap-2 mt-1">
-                                ${Object.entries(PERMISSIONS)
-            .filter(([key]) => key !== "fullAccess")
-            .map(
-                ([key, value]) => `
-                                        <label class="flex items-center gap-2.5 p-3 rounded-xl border border-slate-200 bg-slate-50/50 cursor-pointer hover:border-pink-300 hover:bg-white transition-all has-[:checked]:border-pink-500 has-[:checked]:bg-white has-[:checked]:ring-4 has-[:checked]:ring-pink-500/10">
-                                            <input type="checkbox" name="customRolePerms" value="${value}" class="rounded text-pink-500 focus:ring-pink-500/10" />
-                                            <span class="text-sm font-bold text-slate-800">${value}</span>
-                                        </label>
-                                    `
-            )
-            .join("")}
-                            </div>
-                        </div>
-
-                        <button type="submit" class="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 font-bold rounded-xl bg-gradient-to-r from-blue-600 to-pink-500 text-slate-900 hover:scale-[1.02] hover:shadow-lg hover:shadow-pink-500/25 transition-all text-sm">
-                            <i class="fas fa-floppy-disk"></i> ${state.editingRoleId ? "Save Changes" : "Create Role"}
+                    <div class="flex gap-3">
+                        <select id="billingCompanyFilter" class="min-h-[42px] px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 transition-all text-sm">
+                            <option value="">All Companies</option>
+                            ${state.companies.map((c) => `<option value="${c.id}" ${state.billingCompanyFilter === c.id ? "selected" : ""}>${escapeHtml(c.companyName)}</option>`).join("")}
+                        </select>
+                        <button id="btnOpenBillingModal" class="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-gradient-to-r from-blue-600 to-pink-500 text-slate-900 font-bold rounded-xl hover:shadow-lg hover:shadow-pink-500/20 hover:scale-[1.02] transition-all text-sm">
+                            <i class="fa-solid fa-file-invoice-dollar"></i> Create Record
                         </button>
-                    </form>
-
-                    <!-- Existing Custom Roles List -->
-                    <div class="mt-8 border-t border-slate-100 pt-6">
-                        <h4 class="text-xs font-black text-slate-500 uppercase tracking-widest mb-4">Custom Roles</h4>
-                        ${Object.keys(DYNAMIC_ROLES).length === 0
-            ? `
-                            <p class="text-xs font-medium text-slate-400 italic">No custom roles created yet.</p>
-                        `
-            : `
-                            <div class="space-y-3">
-                                ${Object.values(DYNAMIC_ROLES)
-                .map(
-                    (role) => `
-                                    <div class="flex items-center justify-between p-4 rounded-xl border border-slate-200 bg-slate-50/50 hover:bg-white hover:shadow-sm transition-all animate-fade-in">
-                                        <div>
-                                            <strong class="text-sm text-slate-800 font-bold">${escapeHtml(role.label)}</strong>
-                                            <div class="text-[10px] text-slate-500 mt-1">${role.id}</div>
-                                            <div class="flex gap-1 mt-1.5 flex-wrap">
-                                                ${role.permissions.map((p) => badge(p, "soft")).join("")}
-                                            </div>
-                                        </div>
-                                        <div class="flex gap-2">
-                                            <button class="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 hover:bg-blue-100 flex items-center justify-center transition-colors" data-edit-role="${role.docId}" title="Edit role"><i class="fas fa-pen text-xs"></i></button>
-                                            <button class="w-8 h-8 rounded-lg bg-rose-50 text-rose-600 hover:bg-rose-100 flex items-center justify-center transition-colors" data-delete-role="${role.docId}" title="Delete role"><i class="fas fa-trash text-xs"></i></button>
-                                        </div>
-                                    </div>
-                                `
-                )
-                .join("")}
-                            </div>
-                        `
-        }
                     </div>
+                </div>
+
+                <div class="mt-4">
+                    ${billingTable(filtered)}
                 </div>
             </div>
         </div>
     `;
 }
 
-function renderSubscriptions() {
+function renderContacts() {
+    const totalLeads = state.contactMessages.length;
+    const newLeads = state.contactMessages.filter(m => m.status === 'new' || !m.status).length;
+    const convertedLeads = state.contactMessages.filter(m => m.status === 'converted').length;
+
+    const filtered = state.contactMessages.filter(lead => {
+        const search = (state.contactSearch || "").toLowerCase().trim();
+        const matchesSearch = !search || 
+            (lead.name && lead.name.toLowerCase().includes(search)) || 
+            (lead.email && lead.email.toLowerCase().includes(search));
+
+        const statusFilter = state.contactStatusFilter || "";
+        const leadStatus = lead.status || "new";
+        const matchesStatus = !statusFilter || leadStatus === statusFilter;
+
+        return matchesSearch && matchesStatus;
+    }).sort((a, b) => {
+        const dateA = a.timestamp?.seconds ? new Date(a.timestamp.seconds * 1000) : new Date(a.timestamp || 0);
+        const dateB = b.timestamp?.seconds ? new Date(b.timestamp.seconds * 1000) : new Date(b.timestamp || 0);
+        return dateB - dateA;
+    });
+
     return `
-        <div class="grid">
-            <section class="grid two">
-                <div class="panel">
-                    <div class="flex justify-between items-start mb-4">
-                        <div>
-                            <h3 class="text-lg font-bold">Create Subscription</h3>
-                            <p class="text-sm text-slate-500">Owner-operated provisioning. Customers do not see billing controls here.</p>
-                        </div>
-                        <div>
-                            <button id="btnOpenSubscriptionModal" class="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-blue-600 to-pink-500 text-white font-bold shadow-lg shadow-pink-500/20"> <i class="fas fa-plus"></i> Create Subscription</button>
-                        </div>
-                    </div>
-                    <div class="text-sm text-slate-600">Use the dialog to create a subscription record and set custom limits for trial or paid customers.</div>
-                </div>
-                <div class="panel">
-                    <div class="table-head">
-                        <div>
-                            <h3>Subscriptions</h3>
-                            <p class="muted">${state.subscriptions.length} billing records</p>
-                        </div>
-                    </div>
-                    ${subscriptionTable(state.subscriptions)}
-                </div>
+        <div class="grid gap-8">
+            <section class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                ${metric("Total Leads", totalLeads, "fa-address-book", "blue")}
+                ${metric("New Leads", newLeads, "fa-star", "amber")}
+                ${metric("Converted", convertedLeads, "fa-handshake", "emerald")}
             </section>
+
+            <div class="bg-white/90 backdrop-blur-lg border border-slate-200 rounded-3xl p-6 shadow-lg shadow-slate-200/40">
+                <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4 border-b border-slate-100 pb-5">
+                    <div>
+                        <h3 class="text-xl font-black text-slate-800">Website Leads</h3>
+                        <p class="text-slate-500 text-sm font-medium">Contact form submissions from the public website.</p>
+                    </div>
+                    <div class="flex gap-3">
+                        <div class="relative">
+                            <span class="absolute inset-y-0 left-0 pl-3.5 flex items-center text-slate-400">
+                                <i class="fas fa-magnifying-glass text-sm"></i>
+                            </span>
+                            <input id="contactSearch" type="search" placeholder="Search leads..." value="${escapeHtml(state.contactSearch || "")}" class="w-full min-h-[42px] pl-10 pr-4 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 placeholder-slate-400 outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 transition-all text-sm" />
+                        </div>
+                        <select id="contactStatusFilter" class="min-h-[42px] px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 transition-all text-sm">
+                            <option value="">All Statuses</option>
+                            <option value="new" ${state.contactStatusFilter === "new" ? "selected" : ""}>New</option>
+                            <option value="contacted" ${state.contactStatusFilter === "contacted" ? "selected" : ""}>Contacted</option>
+                            <option value="converted" ${state.contactStatusFilter === "converted" ? "selected" : ""}>Converted</option>
+                            <option value="dismissed" ${state.contactStatusFilter === "dismissed" ? "selected" : ""}>Dismissed</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="mt-4">
+                    ${contactsTable(filtered)}
+                </div>
+            </div>
         </div>
     `;
 }
@@ -1000,7 +951,7 @@ function bindViewEvents() {
     // Setup Modal Triggers
     document.getElementById("btnOpenCompanyModal")?.addEventListener("click", showCompanyModal);
     document.getElementById("btnOpenUserModal")?.addEventListener("click", showUserModal);
-    document.getElementById("btnOpenSubscriptionModal")?.addEventListener("click", showSubscriptionModal);
+    document.getElementById("btnOpenBillingModal")?.addEventListener("click", showBillingModal);
     document.getElementById("btnOpenRoleModal")?.addEventListener("click", showRoleModal);
     document.getElementById("btnAddEmail")?.addEventListener("click", () => showEmailModal());
     document.getElementById("emailSearch")?.addEventListener("input", (event) => {
@@ -1011,6 +962,41 @@ function bindViewEvents() {
             input.focus();
             input.setSelectionRange(input.value.length, input.value.length);
         }
+    });
+
+    // Billing View Interactions
+    document.getElementById("billingCompanyFilter")?.addEventListener("change", (event) => {
+        state.billingCompanyFilter = event.target.value || "";
+        renderShell();
+    });
+
+    // Contacts View Interactions
+    document.getElementById("contactSearch")?.addEventListener("input", (event) => {
+        state.contactSearch = event.target.value || "";
+        renderShell();
+        const input = document.getElementById("contactSearch");
+        if (input) {
+            input.focus();
+            input.setSelectionRange(input.value.length, input.value.length);
+        }
+    });
+    document.getElementById("contactStatusFilter")?.addEventListener("change", (event) => {
+        state.contactStatusFilter = event.target.value || "";
+        renderShell();
+    });
+    document.querySelectorAll(".contact-status-selector").forEach((select) => {
+        select.addEventListener("change", async (event) => {
+            const id = event.target.dataset.contactId;
+            const newStatus = event.target.value;
+            try {
+                await updateRecord("contact_messages", id, { status: newStatus });
+                toast("Contact status updated");
+                await loadData();
+                renderShell();
+            } catch (error) {
+                toast("Failed to update status", true);
+            }
+        });
     });
 
     // Users View Interactions
@@ -1065,10 +1051,6 @@ function bindViewEvents() {
         button.addEventListener("click", () => handleProvisionRequest(button.dataset.provisionRequest));
     });
 
-    document.querySelectorAll("[data-sub-action]").forEach((button) => {
-        button.addEventListener("click", () => handleSubscriptionAction(button));
-    });
-
     document.querySelectorAll("[data-email-action]").forEach((button) => {
         button.addEventListener("click", () => handleEmailAction(button));
     });
@@ -1085,19 +1067,6 @@ function bindViewEvents() {
     // AI Credits adjustment history buttons
     document.querySelectorAll("[data-view-credit-logs]").forEach((button) => {
         button.addEventListener("click", () => showAiCreditsHistoryModal(button.dataset.viewCreditLogs));
-    });
-
-    // Custom Roles Interactions
-    document.getElementById("customRoleForm")?.addEventListener("submit", handleCustomRoleSubmit);
-    document.getElementById("btnCancelRoleEdit")?.addEventListener("click", () => {
-        state.editingRoleId = null;
-        renderShell();
-    });
-    document.querySelectorAll("[data-edit-role]").forEach((button) => {
-        button.addEventListener("click", () => handleEditRoleClick(button.dataset.editRole));
-    });
-    document.querySelectorAll("[data-delete-role]").forEach((button) => {
-        button.addEventListener("click", () => handleDeleteRoleClick(button.dataset.deleteRole));
     });
 }
 
@@ -1620,10 +1589,11 @@ function companyTable(companies) {
                 <thead>
                     <tr class="border-b border-slate-200 text-[10px] font-black uppercase tracking-widest text-slate-500">
                         <th class="px-6 py-4">Company</th>
-                        <th class="px-6 py-4">Plan</th>
+                        <th class="px-6 py-4">Pricing & Cycle</th>
                         <th class="px-6 py-4">Status</th>
                         <th class="px-6 py-4">Users</th>
                         <th class="px-6 py-4">AI Credits</th>
+                        <th class="px-6 py-4">Job Credits</th>
                         <th class="px-6 py-4">Actions</th>
                     </tr>
                 </thead>
@@ -1631,31 +1601,38 @@ function companyTable(companies) {
                     ${companies
             .map((company) => {
                 const used = userCount(company.id);
+                const limit = Number(company.userLimit || 1);
                 return `
                             <tr class="hover:bg-slate-50 transition-colors">
                                 <td class="px-6 py-4">
                                     <div class="font-bold text-slate-800">${escapeHtml(company.companyName)}</div>
                                     <div class="text-[10px] text-slate-500 font-medium">${escapeHtml(company.id)}</div>
                                 </td>
-                                <td class="px-6 py-4">${badge(planName(company.plan), "info")}</td>
+                                <td class="px-6 py-4">
+                                    <div class="font-semibold text-xs text-slate-700">${escapeHtml(company.pricing || "₹0/mo")}</div>
+                                    <div class="text-[9px] text-slate-400 font-bold uppercase">${escapeHtml(company.billingCycle || "monthly")}</div>
+                                </td>
                                 <td class="px-6 py-4">${badge(company.status || "active", statusTone(company.status))}</td>
                                 <td class="px-6 py-4">
                                     <div class="flex justify-between text-[10px] font-bold mb-1">
-                                        <span>${used} / ${company.maxUsers}</span>
-                                        <span>${percent(used, company.maxUsers)}%</span>
+                                        <span>${used} / ${limit}</span>
+                                        <span>${percent(used, limit)}%</span>
                                     </div>
                                     <div class="h-1.5 w-full bg-slate-100/50 rounded-full overflow-hidden">
-                                        <div class="h-full bg-gradient-to-r from-blue-500 to-indigo-500" style="width: ${percent(used, company.maxUsers)}%"></div>
+                                        <div class="h-full bg-gradient-to-r from-blue-500 to-indigo-500" style="width: ${percent(used, limit)}%"></div>
                                     </div>
                                 </td>
                                 <td class="px-6 py-4">
                                     <div class="flex items-center gap-2">
-                                        <span class="text-sm font-black text-slate-700">${Number(company.aiCreditsRemaining || 0).toLocaleString("en-IN")}</span>
+                                        <span class="text-sm font-black text-slate-700">${Number(company.aiCredits || 0).toLocaleString("en-IN")}</span>
                                         <div class="flex gap-1">
                                             <button class="w-7 h-7 rounded-lg bg-indigo-50 text-indigo-600 hover:bg-indigo-100 flex items-center justify-center transition-colors" data-adjust-credits="${company.id}" title="Adjust AI Credits"><i class="fas fa-coins text-[10px]"></i></button>
                                             <button class="w-7 h-7 rounded-lg bg-slate-50 text-slate-600 hover:bg-slate-100 flex items-center justify-center transition-colors" data-view-credit-logs="${company.id}" title="View Credit History"><i class="fas fa-clock-rotate-left text-[10px]"></i></button>
                                         </div>
                                     </div>
+                                </td>
+                                <td class="px-6 py-4 text-xs font-black text-slate-700">
+                                    ${Number(company.jobPostingCredits || 0).toLocaleString("en-IN")}
                                 </td>
                                 <td class="px-6 py-4">${recordActions("companies", company.id)}</td>
                             </tr>
@@ -1713,53 +1690,88 @@ function userTable(users) {
     `;
 }
 
-function subscriptionTable(subscriptions) {
-    if (!subscriptions.length) return empty("No subscriptions created yet.");
+function billingTable(records) {
+    if (!records.length) return empty("No billing records found.");
     return `
-        <div class="table-wrap">
+        <div class="table-wrap overflow-x-auto">
             <table class="w-full text-left">
                 <thead>
                     <tr class="border-b border-slate-200 text-[10px] font-black uppercase tracking-widest text-slate-500">
-                        <th class="px-6 py-4">Customer</th>
-                        <th class="px-6 py-4">Plan</th>
-                        <th class="px-6 py-4">AI Credits</th>
+                        <th class="px-6 py-4">Company</th>
+                        <th class="px-6 py-4">Type</th>
+                        <th class="px-6 py-4">Amount</th>
                         <th class="px-6 py-4">Status</th>
+                        <th class="px-6 py-4">Dates</th>
                         <th class="px-6 py-4">Actions</th>
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-slate-100">
-                    ${subscriptions
+                    ${records
             .map(
-                (sub) => `
+                (record) => `
                         <tr class="hover:bg-slate-50 transition-colors">
                             <td class="px-6 py-4">
-                                <div class="font-bold text-slate-800">${escapeHtml(sub.customerName)}</div>
-                                <div class="text-[10px] text-slate-500 font-medium">${escapeHtml(sub.customerEmail)}</div>
+                                <div class="font-bold text-slate-800">${escapeHtml(companyName(record.companyId))}</div>
+                                <div class="text-[10px] text-slate-500 font-medium">${escapeHtml(record.description || "")}</div>
                             </td>
+                            <td class="px-6 py-4">${badge(record.type || "invoice", record.type === "payment" ? "success" : "info")}</td>
+                            <td class="px-6 py-4 font-black text-slate-700">${inr.format(record.amount || 0)}</td>
+                            <td class="px-6 py-4">${badge(record.status || "pending", statusTone(record.status))}</td>
                             <td class="px-6 py-4">
-                                ${badge(planName(sub.plan), "info")}
-                                <div class="text-[10px] text-slate-500 mt-1">${sub.maxUsers || resolvePlanLimits(sub).maxUsers} users</div>
+                                <div class="text-xs text-slate-800 font-semibold">Inv: ${formatDate(record.invoiceDate)}</div>
+                                <div class="text-[10px] text-slate-500 mt-0.5">Due: ${formatDate(record.dueDate)}</div>
                             </td>
-                            <td class="px-6 py-4">
-                                <div class="text-sm font-black text-slate-700">${Number(sub.aiCreditsRemaining || 0).toLocaleString("en-IN")}</div>
-                                <div class="text-[10px] text-slate-500 mt-0.5">of ${Number(sub.aiCreditsIncluded || 0).toLocaleString("en-IN")}</div>
-                            </td>
-                            <td class="px-6 py-4">
-                                ${badge(sub.status || "active", statusTone(sub.status))}
-                                <div class="text-[10px] text-slate-500 mt-1">Ends ${formatDate(sub.currentPeriodEnd)}</div>
-                            </td>
-                            <td class="px-6 py-4">
-                                <div class="flex gap-2">
-                                    ${recordActionButton("view", "subscriptions", sub.id, "fa-eye", "View")}
-                                    ${recordActionButton("edit", "subscriptions", sub.id, "fa-pen", "Edit")}
-                                    <button class="w-8 h-8 rounded-lg bg-slate-100/50 flex items-center justify-center hover:bg-blue-500/20 hover:text-blue-400 transition-all" data-sub-action="upgrade" data-plan="enterprise" data-sub-id="${sub.id}" title="Upgrade"><i class="fas fa-arrow-up text-xs"></i></button>
-                                    <button class="w-8 h-8 rounded-lg bg-slate-100/50 flex items-center justify-center hover:bg-amber-500/20 hover:text-amber-400 transition-all" data-sub-action="suspend" data-sub-id="${sub.id}" title="Suspend"><i class="fas fa-ban text-xs"></i></button>
-                                    ${recordActionButton("delete", "subscriptions", sub.id, "fa-trash", "Delete", true)}
-                                </div>
-                            </td>
+                            <td class="px-6 py-4">${recordActions("billingRecords", record.id)}</td>
                         </tr>
                     `
             )
+            .join("")}
+                </tbody>
+            </table>
+        </div>
+    `;
+}
+
+function contactsTable(leads) {
+    if (!leads.length) return empty("No website leads found.");
+    return `
+        <div class="table-wrap overflow-x-auto">
+            <table class="w-full text-left">
+                <thead>
+                    <tr class="border-b border-slate-200 text-[10px] font-black uppercase tracking-widest text-slate-500">
+                        <th class="px-6 py-4">Name</th>
+                        <th class="px-6 py-4">Email</th>
+                        <th class="px-6 py-4">Company Size</th>
+                        <th class="px-6 py-4">Message</th>
+                        <th class="px-6 py-4">Date</th>
+                        <th class="px-6 py-4">Status</th>
+                        <th class="px-6 py-4">Action</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-100">
+                    ${leads
+            .map((lead) => {
+                const date = lead.timestamp?.seconds ? new Date(lead.timestamp.seconds * 1000) : new Date(lead.timestamp || 0);
+                const status = lead.status || "new";
+                return `
+                            <tr class="hover:bg-slate-50 transition-colors">
+                                <td class="px-6 py-4 font-bold text-slate-800">${escapeHtml(lead.name || "Anonymous")}</td>
+                                <td class="px-6 py-4 text-xs font-semibold text-slate-600">${escapeHtml(lead.email || "")}</td>
+                                <td class="px-6 py-4">${badge(lead.company_size || "Unknown", "soft")}</td>
+                                <td class="px-6 py-4 text-xs text-slate-600 max-w-xs truncate" title="${escapeHtml(lead.message || "")}">${escapeHtml(lead.message || "No message")}</td>
+                                <td class="px-6 py-4 text-xs font-medium text-slate-500">${formatDateTime(date)}</td>
+                                <td class="px-6 py-4">${badge(status, statusTone(status))}</td>
+                                <td class="px-6 py-4">
+                                    <select data-contact-id="${lead.id}" class="contact-status-selector px-2 py-1 bg-white border border-slate-200 rounded-lg text-slate-700 text-xs focus:border-blue-500 outline-none transition-colors">
+                                        <option value="new" ${status === "new" ? "selected" : ""}>New</option>
+                                        <option value="contacted" ${status === "contacted" ? "selected" : ""}>Contacted</option>
+                                        <option value="converted" ${status === "converted" ? "selected" : ""}>Converted</option>
+                                        <option value="dismissed" ${status === "dismissed" ? "selected" : ""}>Dismissed</option>
+                                    </select>
+                                </td>
+                            </tr>
+                        `;
+            })
             .join("")}
                 </tbody>
             </table>
@@ -1797,7 +1809,8 @@ function companyUsageList() {
     return `<div class="grid gap-4">${state.companies
         .map((company) => {
             const used = userCount(company.id);
-            const p = percent(used, company.maxUsers);
+            const limit = Number(company.userLimit || 1);
+            const p = percent(used, limit);
             const colorClass =
                 p > 90
                     ? "from-rose-500 to-pink-500"
@@ -1808,7 +1821,7 @@ function companyUsageList() {
             <div class="p-4 rounded-2xl bg-white border border-slate-100 hover:shadow-md hover:border-slate-200 transition-all">
                 <div class="flex justify-between items-center mb-3">
                     <strong class="text-sm font-black text-slate-800">${escapeHtml(company.companyName)}</strong>
-                    <span class="text-xs font-bold text-slate-500 bg-slate-100 px-2 py-1 rounded-md">${used}/${company.maxUsers} users</span>
+                    <span class="text-xs font-bold text-slate-500 bg-slate-100 px-2 py-1 rounded-md">${used}/${limit} users</span>
                 </div>
                 <div class="h-2 w-full bg-slate-100 rounded-full overflow-hidden">
                     <div class="h-full bg-gradient-to-r ${colorClass} transition-all duration-500" style="width: ${p}%"></div>
@@ -1924,38 +1937,26 @@ function featureLabel(featureKey) {
 }
 
 function primaryActionLabel() {
-    if (state.view === "requests") return "Review Request";
     if (state.view === "companies") return "Create Company";
     if (state.view === "users") return "Invite User";
     if (state.view === "roles") return "Assign Role";
-    if (state.view === "subscriptions") return "Create Plan";
+    if (state.view === "billing") return "Create Record";
     if (state.view === "emails") return "Add Email";
     return "New Record";
 }
 
 window.WorkCosmoAccess = {
     hasPermission,
-    hasFeature,
     canAddUser,
     canAccessModule,
     getCompanyUsers
 };
 
 function showCompanyModal() {
-    const availableSubscriptions = state.subscriptions.filter(
-        (sub) => !sub.companyId && ["active", "trialing", "grace"].includes(sub.status)
-    );
     openModal({
         title: "Create Company Workspace",
         submitLabel: "Provision Workspace",
         content: `
-            <div class="grid gap-1.5">
-                <label for="companySubscription" class="text-sm font-bold text-slate-700">Subscription</label>
-                <select id="companySubscription" class="w-full min-h-[42px] px-3 py-2 bg-white border border-slate-200 rounded-xl text-slate-900 outline-none focus:border-pink-500 focus:ring-4 focus:ring-pink-500/10 transition-all">
-                    <option value="">No subscription (manual / free)</option>
-                    ${availableSubscriptions.map((sub) => `<option value="${sub.id}">${escapeHtml(sub.customerName)} - ${planName(sub.plan)}</option>`).join("")}
-                </select>
-            </div>
             <div class="grid gap-1.5">
                 <label for="companyName" class="text-sm font-bold text-slate-700">Company Name</label>
                 <input id="companyName" required placeholder="e.g. Udaan Talent Partners" class="w-full min-h-[42px] px-3 py-2 bg-white border border-slate-200 rounded-xl text-slate-900 outline-none focus:border-pink-500 focus:ring-4 focus:ring-pink-500/10 transition-all">
@@ -1964,7 +1965,35 @@ function showCompanyModal() {
                 <label for="companySubdomain" class="text-sm font-bold text-slate-700">Client ID / Subdomain</label>
                 <input id="companySubdomain" required placeholder="e.g. udaan-talent" class="w-full min-h-[42px] px-3 py-2 bg-white border border-slate-200 rounded-xl text-slate-900 outline-none focus:border-pink-500 focus:ring-4 focus:ring-pink-500/10 transition-all">
             </div>
-            <div class="grid gap-1.5">
+            <div class="grid gap-4 grid-cols-2 mt-2">
+                <div class="grid gap-1.5">
+                    <label for="userLimit" class="text-sm font-bold text-slate-700">User Limit</label>
+                    <input id="userLimit" type="number" min="1" value="5" required class="w-full min-h-[42px] px-3 py-2 bg-white border border-slate-200 rounded-xl text-slate-900 outline-none focus:border-pink-500 focus:ring-4 focus:ring-pink-500/10 transition-all">
+                </div>
+                <div class="grid gap-1.5">
+                    <label for="aiCredits" class="text-sm font-bold text-slate-700">AI Credits</label>
+                    <input id="aiCredits" type="number" min="0" value="50000" required class="w-full min-h-[42px] px-3 py-2 bg-white border border-slate-200 rounded-xl text-slate-900 outline-none focus:border-pink-500 focus:ring-4 focus:ring-pink-500/10 transition-all">
+                </div>
+            </div>
+            <div class="grid gap-4 grid-cols-2 mt-2">
+                <div class="grid gap-1.5">
+                    <label for="jobPostingCredits" class="text-sm font-bold text-slate-700">Job Posting Credits</label>
+                    <input id="jobPostingCredits" type="number" min="0" value="10" required class="w-full min-h-[42px] px-3 py-2 bg-white border border-slate-200 rounded-xl text-slate-900 outline-none focus:border-pink-500 focus:ring-4 focus:ring-pink-500/10 transition-all">
+                </div>
+                <div class="grid gap-1.5">
+                    <label for="pricing" class="text-sm font-bold text-slate-700">Pricing</label>
+                    <input id="pricing" placeholder="e.g. ₹2999/mo" required class="w-full min-h-[42px] px-3 py-2 bg-white border border-slate-200 rounded-xl text-slate-900 outline-none focus:border-pink-500 focus:ring-4 focus:ring-pink-500/10 transition-all">
+                </div>
+            </div>
+            <div class="grid gap-1.5 mt-2">
+                <label for="billingCycle" class="text-sm font-bold text-slate-700">Billing Cycle</label>
+                <select id="billingCycle" class="w-full min-h-[42px] px-3 py-2 bg-white border border-slate-200 rounded-xl text-slate-900 outline-none focus:border-pink-500 focus:ring-4 focus:ring-pink-500/10 transition-all">
+                    <option value="monthly">Monthly</option>
+                    <option value="quarterly">Quarterly</option>
+                    <option value="annual">Annual</option>
+                </select>
+            </div>
+            <div class="grid gap-1.5 mt-2">
                 <label for="ownerName" class="text-sm font-bold text-slate-700">Owner Name</label>
                 <input id="ownerName" required class="w-full min-h-[42px] px-3 py-2 bg-white border border-slate-200 rounded-xl text-slate-900 outline-none focus:border-pink-500 focus:ring-4 focus:ring-pink-500/10 transition-all">
             </div>
@@ -1974,13 +2003,6 @@ function showCompanyModal() {
             </div>
         `,
         onSubmit: async (e, form, close) => {
-            const sel = document.getElementById("companySubscription").value;
-            let subscription = null;
-            if (sel) subscription = await getRecord("subscriptions", sel);
-            // If no subscription selected, fall back to starter plan for manual provisioning
-            if (!subscription) {
-                subscription = { id: `manual-${Date.now()}`, plan: PLAN_CATALOG.starter.id, customLimits: {} };
-            }
             const companySubdomain = getClientId(document.getElementById("companySubdomain").value);
             if (!companySubdomain) {
                 toast("Enter a valid client ID / subdomain.", true);
@@ -2013,9 +2035,14 @@ function showCompanyModal() {
                 }
             }
 
-            const companyId = await createCompanyWorkspace(subscription, {
+            const companyId = await createCompanyWorkspace({
                 companyId: companySubdomain,
                 companyName: document.getElementById("companyName").value.trim(),
+                userLimit: Number(document.getElementById("userLimit").value || 1),
+                aiCredits: Number(document.getElementById("aiCredits").value || 0),
+                jobPostingCredits: Number(document.getElementById("jobPostingCredits").value || 0),
+                pricing: document.getElementById("pricing").value.trim(),
+                billingCycle: document.getElementById("billingCycle").value,
                 ownerId: firebaseUser.uid,
                 ownerName: ownerName,
                 ownerEmail: ownerEmail
@@ -2056,7 +2083,7 @@ function showUserModal() {
                 <label for="userCompany" class="text-sm font-bold text-slate-700">Company</label>
                 <select id="userCompany" required class="w-full min-h-[42px] px-3 py-2 bg-white border border-slate-200 rounded-xl text-slate-900 outline-none focus:border-pink-500 focus:ring-4 focus:ring-pink-500/10 transition-all">
                     <option value="">Select company</option>
-                    ${state.companies.map((company) => `<option value="${company.id}">${escapeHtml(company.companyName)} - ${userCount(company.id)}/${company.maxUsers}</option>`).join("")}
+                    ${state.companies.map((company) => `<option value="${company.id}">${escapeHtml(company.companyName)} - ${userCount(company.id)}/${company.userLimit || 1}</option>`).join("")}
                 </select>
             </div>
             <div class="grid gap-1.5">
@@ -2078,9 +2105,8 @@ function showUserModal() {
         `,
         onSubmit: async (e, form, close) => {
             const company = state.companies.find((item) => item.id === document.getElementById("userCompany").value);
-            const subscription = selectedSubscription(company);
             const activeUserCount = userCount(company.id);
-            const check = canAddUser(company, subscription, activeUserCount);
+            const check = canAddUser(company, activeUserCount);
             if (!check.allowed) {
                 toast(check.reason, true);
                 return;
@@ -2115,7 +2141,6 @@ function showUserModal() {
 
             await inviteUser({
                 company,
-                subscription,
                 activeUserCount,
                 userId: firebaseUser.uid,
                 name: inviteName,
@@ -2135,49 +2160,67 @@ function showUserModal() {
     });
 }
 
-function showSubscriptionModal() {
+function showBillingModal() {
     openModal({
-        title: "Create Subscription",
-        submitLabel: "Create Subscription",
+        title: "Create Billing Entry",
+        submitLabel: "Save Record",
         content: `
-            <div class="grid gap-1.5"><label for="customerName" class="text-sm font-bold text-slate-700">Customer Name</label><input id="customerName" required class="w-full min-h-[42px] px-3 py-2 bg-white border border-slate-200 rounded-xl text-slate-900 outline-none focus:border-pink-500 focus:ring-4 focus:ring-pink-500/10 transition-all"></div>
-            <div class="grid gap-1.5"><label for="customerEmail" class="text-sm font-bold text-slate-700">Customer Email</label><input id="customerEmail" type="email" required class="w-full min-h-[42px] px-3 py-2 bg-white border border-slate-200 rounded-xl text-slate-900 outline-none focus:border-pink-500 focus:ring-4 focus:ring-pink-500/10 transition-all"></div>
             <div class="grid gap-1.5">
-                <label for="plan" class="text-sm font-bold text-slate-700">Plan</label>
-                <select id="plan" required class="w-full min-h-[42px] px-3 py-2 bg-white border border-slate-200 rounded-xl text-slate-900 outline-none focus:border-pink-500 focus:ring-4 focus:ring-pink-500/10 transition-all">
-                    ${Object.values(PLAN_CATALOG)
-                .map((plan) => `<option value="${plan.id}">${plan.name}</option>`)
-                .join("")}
+                <label for="billingCompanyId" class="text-sm font-bold text-slate-700">Company</label>
+                <select id="billingCompanyId" required class="w-full min-h-[42px] px-3 py-2 bg-white border border-slate-200 rounded-xl text-slate-900 outline-none focus:border-pink-500 focus:ring-4 focus:ring-pink-500/10 transition-all">
+                    <option value="">Select company</option>
+                    \${state.companies.map((company) => \`<option value="\${company.id}">\${escapeHtml(company.companyName)}</option>\`).join("")}
                 </select>
             </div>
-            <div class="grid gap-1.5"><label for="customMaxUsers" class="text-sm font-bold text-slate-700">Custom Max Users</label><input id="customMaxUsers" type="number" min="1" placeholder="Only for Custom" class="w-full min-h-[42px] px-3 py-2 bg-white border border-slate-200 rounded-xl text-slate-900 outline-none focus:border-pink-500 focus:ring-4 focus:ring-pink-500/10 transition-all"></div>
-            <div class="grid gap-1.5"><label for="customPrice" class="text-sm font-bold text-slate-700">Custom Price Monthly</label><input id="customPrice" type="number" min="0" placeholder="Only for Custom" class="w-full min-h-[42px] px-3 py-2 bg-white border border-slate-200 rounded-xl text-slate-900 outline-none focus:border-pink-500 focus:ring-4 focus:ring-pink-500/10 transition-all"></div>
             <div class="grid gap-1.5">
-                <label for="status" class="text-sm font-bold text-slate-700">Status</label>
-                <select id="status" class="w-full min-h-[42px] px-3 py-2 bg-white border border-slate-200 rounded-xl text-slate-900 outline-none focus:border-pink-500 focus:ring-4 focus:ring-pink-500/10 transition-all">
-                    <option value="trialing">Trialing</option>
-                    <option value="active">Active</option>
-                    <option value="grace">Grace</option>
-                    <option value="past_due">Past due</option>
-                    <option value="suspended">Suspended</option>
+                <label for="billingType" class="text-sm font-bold text-slate-700">Record Type</label>
+                <select id="billingType" required class="w-full min-h-[42px] px-3 py-2 bg-white border border-slate-200 rounded-xl text-slate-900 outline-none focus:border-pink-500 focus:ring-4 focus:ring-pink-500/10 transition-all">
+                    <option value="invoice">Invoice</option>
+                    <option value="payment">Payment Receipt</option>
                 </select>
             </div>
-            <div class="grid gap-1.5"><label for="aiCreditsIncluded" class="text-sm font-bold text-slate-700">AI Credits Included</label><input id="aiCreditsIncluded" type="number" min="0" value="50000" class="w-full min-h-[42px] px-3 py-2 bg-white border border-slate-200 rounded-xl text-slate-900 outline-none focus:border-pink-500 focus:ring-4 focus:ring-pink-500/10 transition-all"></div>
+            <div class="grid gap-1.5">
+                <label for="billingAmount" class="text-sm font-bold text-slate-700">Amount (INR)</label>
+                <input id="billingAmount" type="number" required min="0" class="w-full min-h-[42px] px-3 py-2 bg-white border border-slate-200 rounded-xl text-slate-900 outline-none focus:border-pink-500 focus:ring-4 focus:ring-pink-500/10 transition-all">
+            </div>
+            <div class="grid gap-1.5">
+                <label for="billingDescription" class="text-sm font-bold text-slate-700">Description</label>
+                <input id="billingDescription" type="text" placeholder="e.g. Monthly subscription fee" required class="w-full min-h-[42px] px-3 py-2 bg-white border border-slate-200 rounded-xl text-slate-900 outline-none focus:border-pink-500 focus:ring-4 focus:ring-pink-500/10 transition-all">
+            </div>
+            <div class="grid grid-cols-2 gap-4">
+                <div class="grid gap-1.5">
+                    <label for="billingInvoiceDate" class="text-sm font-bold text-slate-700">Invoice Date</label>
+                    <input id="billingInvoiceDate" type="date" required class="w-full min-h-[42px] px-3 py-2 bg-white border border-slate-200 rounded-xl text-slate-900 outline-none focus:border-pink-500 focus:ring-4 focus:ring-pink-500/10 transition-all">
+                </div>
+                <div class="grid gap-1.5">
+                    <label for="billingDueDate" class="text-sm font-bold text-slate-700">Due Date</label>
+                    <input id="billingDueDate" type="date" required class="w-full min-h-[42px] px-3 py-2 bg-white border border-slate-200 rounded-xl text-slate-900 outline-none focus:border-pink-500 focus:ring-4 focus:ring-pink-500/10 transition-all">
+                </div>
+            </div>
+            <div class="grid gap-1.5">
+                <label for="billingStatus" class="text-sm font-bold text-slate-700">Status</label>
+                <select id="billingStatus" required class="w-full min-h-[42px] px-3 py-2 bg-white border border-slate-200 rounded-xl text-slate-900 outline-none focus:border-pink-500 focus:ring-4 focus:ring-pink-500/10 transition-all">
+                    <option value="pending">Pending</option>
+                    <option value="paid">Paid</option>
+                    <option value="overdue">Overdue</option>
+                    <option value="cancelled">Cancelled</option>
+                </select>
+            </div>
         `,
         onSubmit: async (e, form, close) => {
             const payload = {
-                customerName: document.getElementById("customerName").value.trim(),
-                customerEmail: document.getElementById("customerEmail").value.trim(),
-                plan: document.getElementById("plan").value,
-                maxUsers: document.getElementById("customMaxUsers").value,
-                priceMonthly: document.getElementById("customPrice").value,
-                status: document.getElementById("status").value,
-                aiCreditsIncluded: Number(document.getElementById("aiCreditsIncluded").value || 0)
+                companyId: document.getElementById("billingCompanyId").value,
+                type: document.getElementById("billingType").value,
+                amount: Number(document.getElementById("billingAmount").value || 0),
+                description: document.getElementById("billingDescription").value.trim(),
+                invoiceDate: document.getElementById("billingInvoiceDate").value,
+                dueDate: document.getElementById("billingDueDate").value,
+                status: document.getElementById("billingStatus").value
             };
-            await createSubscription(payload);
+            await createBillingRecord(payload);
             await loadData();
             renderShell();
-            toast("Subscription created.");
+            toast("Billing record created.");
             close();
         }
     });
