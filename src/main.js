@@ -309,54 +309,45 @@ function renderView() {
 function renderOverview() {
     const totalCompanies = state.companies.length;
     const totalUsers = state.users.length;
-    const totalAiCredits = state.companies.reduce((acc, c) => acc + Number(c.aiCredits || 0), 0);
-    const totalJobCredits = state.companies.reduce((acc, c) => acc + Number(c.jobPostingCredits || 0), 0);
-    const totalLeads = state.contactMessages.length;
+    const totalInvoices = state.billingRecords.length;
+    const totalRevenue = state.billingRecords.reduce((acc, r) => acc + Number(r.amount || 0), 0);
     const overdueBills = state.billingRecords.filter((r) => r.status === "overdue").length;
 
-    // Get recent contact form leads (first 5)
-    const recentLeads = [...state.contactMessages]
+    const latestBilling = [...state.billingRecords]
         .sort((a, b) => {
-            const dateA = a.timestamp?.seconds ? new Date(a.timestamp.seconds * 1000) : new Date(a.timestamp || 0);
-            const dateB = b.timestamp?.seconds ? new Date(b.timestamp.seconds * 1000) : new Date(b.timestamp || 0);
-            return dateB - dateA;
+            const aDate = a.invoiceDate ? new Date(a.invoiceDate) : new Date(0);
+            const bDate = b.invoiceDate ? new Date(b.invoiceDate) : new Date(0);
+            return bDate - aDate;
         })
         .slice(0, 5);
 
     return `
         <div class="grid gap-8">
-            <!-- Hero Stats -->
-            <section class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-6">
+            <section class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                 ${metric("Companies", totalCompanies, "fa-building", "emerald")}
                 ${metric("Total Users", totalUsers, "fa-users", "blue")}
-                ${metric("AI Credits", totalAiCredits.toLocaleString("en-IN"), "fa-coins", "rose")}
-                ${metric("Job Credits", totalJobCredits.toLocaleString("en-IN"), "fa-briefcase", "indigo")}
-                ${metric("Website Leads", totalLeads, "fa-address-book", "amber")}
-                ${metric("Overdue Bills", overdueBills, "fa-file-invoice", "rose")}
+                ${metric("Total Invoices", totalInvoices, "fa-file-invoice", "indigo")}
+                ${metric("Revenue", inr.format(totalRevenue), "fa-indian-rupee-sign", "rose")}
             </section>
 
             <div class="grid grid-cols-1 lg:grid-cols-[2fr_1fr] gap-8">
-                <div class="grid gap-8">
-                    <!-- Recent Website Leads -->
-                    <div class="bg-white/70 backdrop-blur-xl border border-slate-200 rounded-3xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] overflow-hidden">
-                        <div class="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
-                            <div>
-                                <h3 class="text-lg font-black text-slate-800">Recent Website Leads</h3>
-                                <p class="text-xs text-slate-500 font-medium">Latest submissions from contact-form</p>
-                            </div>
-                            ${badge(recentLeads.length + " Recent", "info")}
+                <div class="bg-white/70 backdrop-blur-xl border border-slate-200 rounded-3xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] overflow-hidden">
+                    <div class="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
+                        <div>
+                            <h3 class="text-lg font-black text-slate-800">Latest Billing Activity</h3>
+                            <p class="text-xs text-slate-500 font-medium">Recent invoices and payments</p>
                         </div>
-                        <div class="p-0 overflow-x-auto">
-                            ${recentLeadsTable(recentLeads)}
-                        </div>
+                        ${badge(overdueBills + " Overdue", "danger")}
+                    </div>
+                    <div class="p-0 overflow-x-auto">
+                        ${billingTable(latestBilling)}
                     </div>
                 </div>
                 <div class="grid gap-8 items-start">
-                    <!-- Usage Stats -->
                     <div class="bg-white/70 backdrop-blur-xl border border-slate-200 rounded-3xl shadow-[0_8px_30px_rgb(0,0,0,0.04)]">
                         <div class="p-6 border-b border-slate-100 bg-slate-50/50">
-                            <h3 class="text-lg font-black text-slate-800">Workspace User Limits</h3>
-                            <p class="text-xs text-slate-500 font-medium">Tenant resource consumption</p>
+                            <h3 class="text-lg font-black text-slate-800">Workspace Usage</h3>
+                            <p class="text-xs text-slate-500 font-medium">Current client consumption</p>
                         </div>
                         <div class="p-6">
                             ${companyUsageList()}
@@ -1179,7 +1170,7 @@ async function handleProvisionRequest(requestId) {
     }
 
     // 2. Register Firebase Auth Account using Secondary Auth
-    const tempPassword = "WorkCosmo@2026!";
+    const tempPassword = "WorkCosmo@2026!"; // Temporary password for initial provisioning
     let firebaseUser;
     try {
         toast("Creating secure login credentials...", false);
@@ -1477,11 +1468,26 @@ async function handleRecordAction(button) {
     }
 
     if (action === "view") {
+        if (collectionName === "billingRecords") {
+            showBillingRecordView(record);
+            return;
+        }
         openRecordModal(`View ${collectionName}/${id}`, JSON.stringify(record, null, 2), true);
         return;
     }
 
+    if (action === "pdf") {
+        if (collectionName === "billingRecords") {
+            downloadBillingInvoiceAsPdf(record);
+            return;
+        }
+    }
+
     if (action === "edit") {
+        if (collectionName === "billingRecords") {
+            showBillingModal(record);
+            return;
+        }
         if (collectionName === "emails") {
             showEmailModal(record);
             return;
@@ -1536,7 +1542,8 @@ function findRecord(collectionName, id) {
         permissions: state.permissions,
         accessPasses: state.accessPasses,
         purchaseRequests: state.purchaseRequests,
-        emails: state.emails
+        emails: state.emails,
+        billingRecords: state.billingRecords
     };
     return collections[collectionName]?.find((item) => item.id === id);
 }
@@ -1793,13 +1800,17 @@ function contactsTable(leads) {
 }
 
 function recordActions(collectionName, id) {
-    return `
-        <div class="flex gap-2">
-            ${recordActionButton("view", collectionName, id, "fa-eye", "View")}
-            ${recordActionButton("edit", collectionName, id, "fa-pen", "Edit")}
-            ${recordActionButton("delete", collectionName, id, "fa-trash", "Delete", true)}
-        </div>
-    `;
+    const actions = [
+        recordActionButton("view", collectionName, id, "fa-eye", "View"),
+        recordActionButton("edit", collectionName, id, "fa-pen", "Edit"),
+        recordActionButton("delete", collectionName, id, "fa-trash", "Delete", true)
+    ];
+
+    if (collectionName === "billingRecords") {
+        actions.push(recordActionButton("pdf", collectionName, id, "fa-file-pdf", "Export"));
+    }
+
+    return `<div class="flex gap-2">${actions.join("")}</div>`;
 }
 
 function recordActionButton(action, collectionName, id, icon, title, danger = false) {
@@ -2173,54 +2184,65 @@ function showUserModal() {
     });
 }
 
-function showBillingModal() {
+function showBillingModal(record = null) {
+    const isEdit = Boolean(record?.id);
+    const title = isEdit ? "Edit Billing Entry" : "Create Billing Entry";
+    const submitLabel = isEdit ? "Save Changes" : "Save Record";
+    const invoiceDate = record?.invoiceDate ? record.invoiceDate.split("T")[0] : "";
+    const dueDate = record?.dueDate ? record.dueDate.split("T")[0] : "";
+
     openModal({
-        title: "Create Billing Entry",
-        submitLabel: "Save Record",
+        title,
+        submitLabel,
         content: `
             <div class="grid gap-1.5">
                 <label for="billingCompanyId" class="text-sm font-bold text-slate-700">Company</label>
                 <select id="billingCompanyId" required class="w-full min-h-[42px] px-3 py-2 bg-white border border-slate-200 rounded-xl text-slate-900 outline-none focus:border-pink-500 focus:ring-4 focus:ring-pink-500/10 transition-all">
                     <option value="">Select company</option>
-                    ${state.companies.map((company) => `<option value="${company.id}">${escapeHtml(company.companyName)}</option>`).join("")}
+                    ${state.companies
+                        .map((company) => `
+                            <option value="${company.id}" ${record?.companyId === company.id ? "selected" : ""}>
+                                ${escapeHtml(company.companyName)}
+                            </option>`)
+                        .join("")}
                 </select>
             </div>
             <div class="grid gap-1.5">
                 <label for="billingType" class="text-sm font-bold text-slate-700">Record Type</label>
                 <select id="billingType" required class="w-full min-h-[42px] px-3 py-2 bg-white border border-slate-200 rounded-xl text-slate-900 outline-none focus:border-pink-500 focus:ring-4 focus:ring-pink-500/10 transition-all">
-                    <option value="invoice">Invoice</option>
-                    <option value="payment">Payment Receipt</option>
+                    <option value="invoice" ${record?.type === "invoice" ? "selected" : ""}>Invoice</option>
+                    <option value="payment" ${record?.type === "payment" ? "selected" : ""}>Payment Receipt</option>
                 </select>
             </div>
             <div class="grid gap-1.5">
                 <label for="billingAmount" class="text-sm font-bold text-slate-700">Amount (INR)</label>
-                <input id="billingAmount" type="number" required min="0" class="w-full min-h-[42px] px-3 py-2 bg-white border border-slate-200 rounded-xl text-slate-900 outline-none focus:border-pink-500 focus:ring-4 focus:ring-pink-500/10 transition-all">
+                <input id="billingAmount" type="number" required min="0" value="${record?.amount ?? ""}" class="w-full min-h-[42px] px-3 py-2 bg-white border border-slate-200 rounded-xl text-slate-900 outline-none focus:border-pink-500 focus:ring-4 focus:ring-pink-500/10 transition-all">
             </div>
             <div class="grid gap-1.5">
                 <label for="billingDescription" class="text-sm font-bold text-slate-700">Description</label>
-                <input id="billingDescription" type="text" placeholder="e.g. Monthly subscription fee" required class="w-full min-h-[42px] px-3 py-2 bg-white border border-slate-200 rounded-xl text-slate-900 outline-none focus:border-pink-500 focus:ring-4 focus:ring-pink-500/10 transition-all">
+                <input id="billingDescription" type="text" placeholder="e.g. Monthly subscription fee" required value="${escapeHtml(record?.description || "")}" class="w-full min-h-[42px] px-3 py-2 bg-white border border-slate-200 rounded-xl text-slate-900 outline-none focus:border-pink-500 focus:ring-4 focus:ring-pink-500/10 transition-all">
             </div>
             <div class="grid grid-cols-2 gap-4">
                 <div class="grid gap-1.5">
                     <label for="billingInvoiceDate" class="text-sm font-bold text-slate-700">Invoice Date</label>
-                    <input id="billingInvoiceDate" type="date" required class="w-full min-h-[42px] px-3 py-2 bg-white border border-slate-200 rounded-xl text-slate-900 outline-none focus:border-pink-500 focus:ring-4 focus:ring-pink-500/10 transition-all">
+                    <input id="billingInvoiceDate" type="date" required value="${invoiceDate}" class="w-full min-h-[42px] px-3 py-2 bg-white border border-slate-200 rounded-xl text-slate-900 outline-none focus:border-pink-500 focus:ring-4 focus:ring-pink-500/10 transition-all">
                 </div>
                 <div class="grid gap-1.5">
                     <label for="billingDueDate" class="text-sm font-bold text-slate-700">Due Date</label>
-                    <input id="billingDueDate" type="date" required class="w-full min-h-[42px] px-3 py-2 bg-white border border-slate-200 rounded-xl text-slate-900 outline-none focus:border-pink-500 focus:ring-4 focus:ring-pink-500/10 transition-all">
+                    <input id="billingDueDate" type="date" required value="${dueDate}" class="w-full min-h-[42px] px-3 py-2 bg-white border border-slate-200 rounded-xl text-slate-900 outline-none focus:border-pink-500 focus:ring-4 focus:ring-pink-500/10 transition-all">
                 </div>
             </div>
             <div class="grid gap-1.5">
                 <label for="billingStatus" class="text-sm font-bold text-slate-700">Status</label>
                 <select id="billingStatus" required class="w-full min-h-[42px] px-3 py-2 bg-white border border-slate-200 rounded-xl text-slate-900 outline-none focus:border-pink-500 focus:ring-4 focus:ring-pink-500/10 transition-all">
-                    <option value="pending">Pending</option>
-                    <option value="paid">Paid</option>
-                    <option value="overdue">Overdue</option>
-                    <option value="cancelled">Cancelled</option>
+                    <option value="pending" ${record?.status === "pending" ? "selected" : ""}>Pending</option>
+                    <option value="paid" ${record?.status === "paid" ? "selected" : ""}>Paid</option>
+                    <option value="overdue" ${record?.status === "overdue" ? "selected" : ""}>Overdue</option>
+                    <option value="cancelled" ${record?.status === "cancelled" ? "selected" : ""}>Cancelled</option>
                 </select>
             </div>
         `,
-        onSubmit: async (e, form, close) => {
+        onSubmit: async (_e, _form, close) => {
             const payload = {
                 companyId: document.getElementById("billingCompanyId").value,
                 type: document.getElementById("billingType").value,
@@ -2230,13 +2252,138 @@ function showBillingModal() {
                 dueDate: document.getElementById("billingDueDate").value,
                 status: document.getElementById("billingStatus").value
             };
-            await createBillingRecord(payload);
+
+            if (isEdit) {
+                await updateBillingRecord(record.id, payload);
+                toast("Billing record updated.");
+            } else {
+                await createBillingRecord(payload);
+                toast("Billing record created.");
+            }
+
             await loadData();
             renderShell();
-            toast("Billing record created.");
             close();
         }
     });
+}
+
+function showBillingRecordView(record) {
+    openModal({
+        title: `Billing Record: ${record.id}`,
+        isForm: false,
+        cancelLabel: "Close",
+        content: `
+            <div class="grid gap-4">
+                <div class="grid gap-1.5">
+                    <div class="text-xs font-bold uppercase tracking-wider text-slate-500">Company</div>
+                    <div class="text-sm font-black text-slate-800">${escapeHtml(companyName(record.companyId))}</div>
+                </div>
+                <div class="grid grid-cols-2 gap-4">
+                    <div class="grid gap-1.5">
+                        <div class="text-xs font-bold uppercase tracking-wider text-slate-500">Type</div>
+                        <div>${badge(record.type || "invoice", record.type === "payment" ? "success" : "info")}</div>
+                    </div>
+                    <div class="grid gap-1.5">
+                        <div class="text-xs font-bold uppercase tracking-wider text-slate-500">Amount</div>
+                        <div class="text-sm font-black text-slate-800">${inr.format(record.amount || 0)}</div>
+                    </div>
+                </div>
+                <div class="grid gap-1.5">
+                    <div class="text-xs font-bold uppercase tracking-wider text-slate-500">Status</div>
+                    <div>${badge(record.status || "pending", statusTone(record.status))}</div>
+                </div>
+                <div class="grid grid-cols-2 gap-4">
+                    <div class="grid gap-1.5">
+                        <div class="text-xs font-bold uppercase tracking-wider text-slate-500">Invoice Date</div>
+                        <div>${formatDate(record.invoiceDate)}</div>
+                    </div>
+                    <div class="grid gap-1.5">
+                        <div class="text-xs font-bold uppercase tracking-wider text-slate-500">Due Date</div>
+                        <div>${formatDate(record.dueDate)}</div>
+                    </div>
+                </div>
+                <div class="grid gap-1.5">
+                    <div class="text-xs font-bold uppercase tracking-wider text-slate-500">Description</div>
+                    <div class="text-sm text-slate-700">${escapeHtml(record.description || "No description")}</div>
+                </div>
+            </div>
+        `
+    });
+}
+
+function downloadBillingInvoiceAsPdf(record) {
+    const invoiceHtml = `<!doctype html>
+    <html>
+    <head>
+        <meta charset="utf-8" />
+        <title>Invoice ${record.id}</title>
+        <style>
+            body { font-family: system-ui, sans-serif; margin: 0; padding: 24px; color: #111827; background: #f8fafc; }
+            .invoice { max-width: 720px; margin: auto; background: #ffffff; padding: 32px; border-radius: 24px; box-shadow: 0 20px 55px rgba(15, 23, 42, 0.08); }
+            .brand { display: flex; justify-content: space-between; align-items: center; margin-bottom: 32px; }
+            .brand h1 { margin: 0; font-size: 1.4rem; letter-spacing: -0.03em; }
+            .brand small { color: #6b7280; font-size: 0.9rem; }
+            .section { margin-bottom: 24px; }
+            .section h2 { margin: 0 0 8px; font-size: 0.95rem; text-transform: uppercase; letter-spacing: 0.08em; color: #6b7280; }
+            .details, .totals { width: 100%; border-collapse: collapse; }
+            .details td, .totals td { padding: 10px 0; border-bottom: 1px solid #e5e7eb; }
+            .details td.label { width: 35%; font-weight: 700; color: #111827; }
+            .details td.value { color: #374151; }
+            .totals td { font-size: 1rem; }
+            .totals td.label { color: #6b7280; }
+            .totals td.amount { font-weight: 900; text-align: right; }
+            .badge { display: inline-block; padding: 8px 12px; border-radius: 9999px; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.08em; font-weight: 700; }
+            .badge.info { background: #eff6ff; color: #2563eb; }
+            .badge.success { background: #ecfdf5; color: #047857; }
+            .badge.warning { background: #fef3c7; color: #b45309; }
+            .badge.danger { background: #fee2e2; color: #b91c1c; }
+        </style>
+    </head>
+    <body>
+        <div class="invoice">
+            <div class="brand">
+                <div>
+                    <h1>Work Cosmo</h1>
+                    <small>Manual billing invoice</small>
+                </div>
+                <div>
+                    <div>Invoice ID: ${escapeHtml(record.id)}</div>
+                    <div>Date: ${formatDate(record.invoiceDate)}</div>
+                </div>
+            </div>
+            <div class="section">
+                <h2>Billing Details</h2>
+                <table class="details">
+                    <tr><td class="label">Company</td><td class="value">${escapeHtml(companyName(record.companyId))}</td></tr>
+                    <tr><td class="label">Type</td><td class="value">${escapeHtml(record.type || "invoice")}</td></tr>
+                    <tr><td class="label">Status</td><td class="value">${escapeHtml(record.status || "pending")}</td></tr>
+                    <tr><td class="label">Description</td><td class="value">${escapeHtml(record.description || "-")}</td></tr>
+                    <tr><td class="label">Due Date</td><td class="value">${formatDate(record.dueDate)}</td></tr>
+                </table>
+            </div>
+            <div class="section">
+                <table class="totals">
+                    <tr><td class="label">Total</td><td class="amount">${inr.format(record.amount || 0)}</td></tr>
+                </table>
+            </div>
+            <div class="section">
+                <small style="color:#6b7280;">Generated by Work Cosmo Access Center</small>
+            </div>
+        </div>
+    </body>
+    </html>`;
+
+    const printWindow = window.open("", "_blank", "noopener,noreferrer");
+    if (!printWindow) {
+        toast("Popup blocked. Allow popups to export PDF.", true);
+        return;
+    }
+
+    printWindow.document.write(invoiceHtml);
+    printWindow.document.close();
+    printWindow.focus();
+    printWindow.print();
 }
 
 function showRoleModal() {
