@@ -197,6 +197,23 @@ function renderShell() {
                         <div class="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center text-blue-600">
                             <i class="fas fa-user-shield"></i>
                         </div>
+
+    function numberToWords(num) {
+        const a = ["", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten", "Eleven", "Twelve", "Thirteen", "Fourteen", "Fifteen", "Sixteen", "Seventeen", "Eighteen", "Nineteen"];
+        const b = ["", "", "Twenty", "Thirty", "Forty", "Fifty", "Sixty", "Seventy", "Eighty", "Ninety"];
+        if (num < 20) return a[num];
+        if (num < 100) return b[Math.floor(num / 10)] + (num % 10 ? " " + a[num % 10] : "");
+        if (num < 1000) return a[Math.floor(num / 100)] + " Hundred" + (num % 100 ? " " + numberToWords(num % 100) : "");
+        if (num < 100000) return numberToWords(Math.floor(num / 1000)) + " Thousand" + (num % 1000 ? " " + numberToWords(num % 1000) : "");
+        if (num < 10000000) return numberToWords(Math.floor(num / 100000)) + " Lakh" + (num % 100000 ? " " + numberToWords(num % 100000) : "");
+        return numberToWords(Math.floor(num / 10000000)) + " Crore" + (num % 10000000 ? " " + numberToWords(num % 10000000) : "");
+    }
+
+    function toIndianCurrencyWords(amount) {
+        const rounded = Math.round(amount);
+        if (rounded === 0) return "Zero Rupees";
+        return numberToWords(rounded) + " Rupees";
+    }
                         <div class="flex-1 overflow-hidden">
                             <strong class="block text-sm text-slate-800 truncate">${escapeHtml(state.session.company?.companyName || "Platform Admin")}</strong>
                             <span class="block text-xs text-slate-500 mt-0.5 truncate">${state.session.adminMode ? "Super Admin" : escapeHtml(state.session.user?.role || "Admin")}</span>
@@ -2191,62 +2208,177 @@ function showBillingModal(record = null) {
     const invoiceDate = record?.invoiceDate ? record.invoiceDate.split("T")[0] : "";
     const dueDate = record?.dueDate ? record.dueDate.split("T")[0] : "";
 
+    const getValue = (key, defaultValue = "") => record?.[key] ?? defaultValue;
+
     openModal({
         title,
         submitLabel,
         content: `
-            <div class="grid gap-1.5">
-                <label for="billingCompanyId" class="text-sm font-bold text-slate-700">Company</label>
-                <select id="billingCompanyId" required class="w-full min-h-[42px] px-3 py-2 bg-white border border-slate-200 rounded-xl text-slate-900 outline-none focus:border-pink-500 focus:ring-4 focus:ring-pink-500/10 transition-all">
-                    <option value="">Select company</option>
-                    ${state.companies
-                        .map((company) => `
-                            <option value="${company.id}" ${record?.companyId === company.id ? "selected" : ""}>
-                                ${escapeHtml(company.companyName)}
-                            </option>`)
-                        .join("")}
-                </select>
-            </div>
-            <div class="grid gap-1.5">
-                <label for="billingType" class="text-sm font-bold text-slate-700">Record Type</label>
-                <select id="billingType" required class="w-full min-h-[42px] px-3 py-2 bg-white border border-slate-200 rounded-xl text-slate-900 outline-none focus:border-pink-500 focus:ring-4 focus:ring-pink-500/10 transition-all">
-                    <option value="invoice" ${record?.type === "invoice" ? "selected" : ""}>Invoice</option>
-                    <option value="payment" ${record?.type === "payment" ? "selected" : ""}>Payment Receipt</option>
-                </select>
-            </div>
-            <div class="grid gap-1.5">
-                <label for="billingAmount" class="text-sm font-bold text-slate-700">Amount (INR)</label>
-                <input id="billingAmount" type="number" required min="0" value="${record?.amount ?? ""}" class="w-full min-h-[42px] px-3 py-2 bg-white border border-slate-200 rounded-xl text-slate-900 outline-none focus:border-pink-500 focus:ring-4 focus:ring-pink-500/10 transition-all">
-            </div>
-            <div class="grid gap-1.5">
-                <label for="billingDescription" class="text-sm font-bold text-slate-700">Description</label>
-                <input id="billingDescription" type="text" placeholder="e.g. Monthly subscription fee" required value="${escapeHtml(record?.description || "")}" class="w-full min-h-[42px] px-3 py-2 bg-white border border-slate-200 rounded-xl text-slate-900 outline-none focus:border-pink-500 focus:ring-4 focus:ring-pink-500/10 transition-all">
-            </div>
-            <div class="grid grid-cols-2 gap-4">
-                <div class="grid gap-1.5">
-                    <label for="billingInvoiceDate" class="text-sm font-bold text-slate-700">Invoice Date</label>
-                    <input id="billingInvoiceDate" type="date" required value="${invoiceDate}" class="w-full min-h-[42px] px-3 py-2 bg-white border border-slate-200 rounded-xl text-slate-900 outline-none focus:border-pink-500 focus:ring-4 focus:ring-pink-500/10 transition-all">
+            <div class="grid gap-4">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="grid gap-1.5">
+                        <label for="billingCompanyId" class="text-sm font-bold text-slate-700">Company</label>
+                        <select id="billingCompanyId" required class="w-full min-h-[42px] px-3 py-2 bg-white border border-slate-200 rounded-xl text-slate-900 outline-none focus:border-pink-500 focus:ring-4 focus:ring-pink-500/10 transition-all">
+                            <option value="">Select company</option>
+                            ${state.companies
+                                .map((company) => `
+                                    <option value="${company.id}" ${getValue("companyId") === company.id ? "selected" : ""}>
+                                        ${escapeHtml(company.companyName)}
+                                    </option>`)
+                                .join("")}
+                        </select>
+                    </div>
+                    <div class="grid gap-1.5">
+                        <label for="billingType" class="text-sm font-bold text-slate-700">Record Type</label>
+                        <select id="billingType" required class="w-full min-h-[42px] px-3 py-2 bg-white border border-slate-200 rounded-xl text-slate-900 outline-none focus:border-pink-500 focus:ring-4 focus:ring-pink-500/10 transition-all">
+                            <option value="invoice" ${getValue("type", "invoice") === "invoice" ? "selected" : ""}>Invoice</option>
+                            <option value="payment" ${getValue("type") === "payment" ? "selected" : ""}>Payment Receipt</option>
+                        </select>
+                    </div>
                 </div>
-                <div class="grid gap-1.5">
-                    <label for="billingDueDate" class="text-sm font-bold text-slate-700">Due Date</label>
-                    <input id="billingDueDate" type="date" required value="${dueDate}" class="w-full min-h-[42px] px-3 py-2 bg-white border border-slate-200 rounded-xl text-slate-900 outline-none focus:border-pink-500 focus:ring-4 focus:ring-pink-500/10 transition-all">
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="grid gap-1.5">
+                        <label for="billingBuyerName" class="text-sm font-bold text-slate-700">Bill To / Buyer Name</label>
+                        <input id="billingBuyerName" type="text" required value="${escapeHtml(getValue("buyerName"))}" class="w-full min-h-[42px] px-3 py-2 bg-white border border-slate-200 rounded-xl text-slate-900 outline-none focus:border-pink-500 focus:ring-4 focus:ring-pink-500/10 transition-all">
+                    </div>
+                    <div class="grid gap-1.5">
+                        <label for="billingBuyerGSTIN" class="text-sm font-bold text-slate-700">Buyer GSTIN</label>
+                        <input id="billingBuyerGSTIN" type="text" value="${escapeHtml(getValue("buyerGSTIN", "URP"))}" placeholder="URP if unregistered" class="w-full min-h-[42px] px-3 py-2 bg-white border border-slate-200 rounded-xl text-slate-900 outline-none focus:border-pink-500 focus:ring-4 focus:ring-pink-500/10 transition-all">
+                    </div>
                 </div>
-            </div>
-            <div class="grid gap-1.5">
-                <label for="billingStatus" class="text-sm font-bold text-slate-700">Status</label>
-                <select id="billingStatus" required class="w-full min-h-[42px] px-3 py-2 bg-white border border-slate-200 rounded-xl text-slate-900 outline-none focus:border-pink-500 focus:ring-4 focus:ring-pink-500/10 transition-all">
-                    <option value="pending" ${record?.status === "pending" ? "selected" : ""}>Pending</option>
-                    <option value="paid" ${record?.status === "paid" ? "selected" : ""}>Paid</option>
-                    <option value="overdue" ${record?.status === "overdue" ? "selected" : ""}>Overdue</option>
-                    <option value="cancelled" ${record?.status === "cancelled" ? "selected" : ""}>Cancelled</option>
-                </select>
+
+                <div class="grid gap-1.5">
+                    <label for="billingBuyerAddress" class="text-sm font-bold text-slate-700">Buyer Address</label>
+                    <textarea id="billingBuyerAddress" rows="2" class="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-slate-900 outline-none focus:border-pink-500 focus:ring-4 focus:ring-pink-500/10 transition-all">${escapeHtml(getValue("buyerAddress"))}</textarea>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="grid gap-1.5">
+                        <label for="billingPlaceOfSupply" class="text-sm font-bold text-slate-700">Place of Supply</label>
+                        <input id="billingPlaceOfSupply" type="text" value="${escapeHtml(getValue("placeOfSupply", "Maharashtra - 27"))}" class="w-full min-h-[42px] px-3 py-2 bg-white border border-slate-200 rounded-xl text-slate-900 outline-none focus:border-pink-500 focus:ring-4 focus:ring-pink-500/10 transition-all">
+                    </div>
+                    <div class="grid gap-1.5">
+                        <label for="billingReverseCharge" class="text-sm font-bold text-slate-700">Reverse Charge Applicable</label>
+                        <select id="billingReverseCharge" class="w-full min-h-[42px] px-3 py-2 bg-white border border-slate-200 rounded-xl text-slate-900 outline-none focus:border-pink-500 focus:ring-4 focus:ring-pink-500/10 transition-all">
+                            <option value="No" ${getValue("reverseCharge", "No") === "No" ? "selected" : ""}>No</option>
+                            <option value="Yes" ${getValue("reverseCharge") === "Yes" ? "selected" : ""}>Yes</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="grid gap-1.5">
+                        <label for="billingHSNSAC" class="text-sm font-bold text-slate-700">HSN / SAC Code</label>
+                        <input id="billingHSNSAC" type="text" value="${escapeHtml(getValue("hsnSac", "998313"))}" class="w-full min-h-[42px] px-3 py-2 bg-white border border-slate-200 rounded-xl text-slate-900 outline-none focus:border-pink-500 focus:ring-4 focus:ring-pink-500/10 transition-all">
+                    </div>
+                    <div class="grid gap-1.5">
+                        <label for="billingUOM" class="text-sm font-bold text-slate-700">UOM</label>
+                        <input id="billingUOM" type="text" value="${escapeHtml(getValue("uom", "Nos"))}" class="w-full min-h-[42px] px-3 py-2 bg-white border border-slate-200 rounded-xl text-slate-900 outline-none focus:border-pink-500 focus:ring-4 focus:ring-pink-500/10 transition-all">
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div class="grid gap-1.5">
+                        <label for="billingQty" class="text-sm font-bold text-slate-700">Quantity</label>
+                        <input id="billingQty" type="number" required min="0" value="${getValue("qty", 1)}" class="w-full min-h-[42px] px-3 py-2 bg-white border border-slate-200 rounded-xl text-slate-900 outline-none focus:border-pink-500 focus:ring-4 focus:ring-pink-500/10 transition-all">
+                    </div>
+                    <div class="grid gap-1.5">
+                        <label for="billingUnitRate" class="text-sm font-bold text-slate-700">Unit Rate (₹)</label>
+                        <input id="billingUnitRate" type="number" required min="0" value="${getValue("unitRate", 0)}" class="w-full min-h-[42px] px-3 py-2 bg-white border border-slate-200 rounded-xl text-slate-900 outline-none focus:border-pink-500 focus:ring-4 focus:ring-pink-500/10 transition-all">
+                    </div>
+                    <div class="grid gap-1.5">
+                        <label for="billingDiscount" class="text-sm font-bold text-slate-700">Discount (%)</label>
+                        <input id="billingDiscount" type="number" min="0" max="100" value="${getValue("discount", 0)}" class="w-full min-h-[42px] px-3 py-2 bg-white border border-slate-200 rounded-xl text-slate-900 outline-none focus:border-pink-500 focus:ring-4 focus:ring-pink-500/10 transition-all">
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="grid gap-1.5">
+                        <label for="billingGstRate" class="text-sm font-bold text-slate-700">GST Rate (%)</label>
+                        <input id="billingGstRate" type="number" required min="0" value="${getValue("gstRate", 18)}" class="w-full min-h-[42px] px-3 py-2 bg-white border border-slate-200 rounded-xl text-slate-900 outline-none focus:border-pink-500 focus:ring-4 focus:ring-pink-500/10 transition-all">
+                    </div>
+                    <div class="grid gap-1.5">
+                        <label for="billingAmount" class="text-sm font-bold text-slate-700">Taxable Value (₹)</label>
+                        <input id="billingAmount" type="number" required min="0" value="${getValue("amount", 0)}" class="w-full min-h-[42px] px-3 py-2 bg-white border border-slate-200 rounded-xl text-slate-900 outline-none focus:border-pink-500 focus:ring-4 focus:ring-pink-500/10 transition-all">
+                    </div>
+                </div>
+
+                <div class="grid gap-1.5">
+                    <label for="billingDescription" class="text-sm font-bold text-slate-700">Description</label>
+                    <input id="billingDescription" type="text" placeholder="e.g. Monthly subscription fee" required value="${escapeHtml(getValue("description"))}" class="w-full min-h-[42px] px-3 py-2 bg-white border border-slate-200 rounded-xl text-slate-900 outline-none focus:border-pink-500 focus:ring-4 focus:ring-pink-500/10 transition-all">
+                </div>
+
+                <div class="grid grid-cols-2 gap-4">
+                    <div class="grid gap-1.5">
+                        <label for="billingInvoiceDate" class="text-sm font-bold text-slate-700">Invoice Date</label>
+                        <input id="billingInvoiceDate" type="date" required value="${invoiceDate}" class="w-full min-h-[42px] px-3 py-2 bg-white border border-slate-200 rounded-xl text-slate-900 outline-none focus:border-pink-500 focus:ring-4 focus:ring-pink-500/10 transition-all">
+                    </div>
+                    <div class="grid gap-1.5">
+                        <label for="billingDueDate" class="text-sm font-bold text-slate-700">Due Date</label>
+                        <input id="billingDueDate" type="date" required value="${dueDate}" class="w-full min-h-[42px] px-3 py-2 bg-white border border-slate-200 rounded-xl text-slate-900 outline-none focus:border-pink-500 focus:ring-4 focus:ring-pink-500/10 transition-all">
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="grid gap-1.5">
+                        <label for="billingBuyerState" class="text-sm font-bold text-slate-700">Buyer State</label>
+                        <input id="billingBuyerState" type="text" value="${escapeHtml(getValue("buyerState", "Maharashtra"))}" class="w-full min-h-[42px] px-3 py-2 bg-white border border-slate-200 rounded-xl text-slate-900 outline-none focus:border-pink-500 focus:ring-4 focus:ring-pink-500/10 transition-all">
+                    </div>
+                    <div class="grid gap-1.5">
+                        <label for="billingBuyerStateCode" class="text-sm font-bold text-slate-700">Buyer State Code</label>
+                        <input id="billingBuyerStateCode" type="text" value="${escapeHtml(getValue("buyerStateCode", "27"))}" class="w-full min-h-[42px] px-3 py-2 bg-white border border-slate-200 rounded-xl text-slate-900 outline-none focus:border-pink-500 focus:ring-4 focus:ring-pink-500/10 transition-all">
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="grid gap-1.5">
+                        <label for="billingShipTo" class="text-sm font-bold text-slate-700">Ship To / Delivery Location</label>
+                        <input id="billingShipTo" type="text" value="${escapeHtml(getValue("shipTo"))}" class="w-full min-h-[42px] px-3 py-2 bg-white border border-slate-200 rounded-xl text-slate-900 outline-none focus:border-pink-500 focus:ring-4 focus:ring-pink-500/10 transition-all">
+                    </div>
+                    <div class="grid gap-1.5">
+                        <label for="billingShippingState" class="text-sm font-bold text-slate-700">Shipping State</label>
+                        <input id="billingShippingState" type="text" value="${escapeHtml(getValue("shippingState", "Maharashtra"))}" class="w-full min-h-[42px] px-3 py-2 bg-white border border-slate-200 rounded-xl text-slate-900 outline-none focus:border-pink-500 focus:ring-4 focus:ring-pink-500/10 transition-all">
+                    </div>
+                </div>
+
+                <div class="grid gap-1.5">
+                    <label for="billingStatus" class="text-sm font-bold text-slate-700">Status</label>
+                    <select id="billingStatus" required class="w-full min-h-[42px] px-3 py-2 bg-white border border-slate-200 rounded-xl text-slate-900 outline-none focus:border-pink-500 focus:ring-4 focus:ring-pink-500/10 transition-all">
+                        <option value="pending" ${getValue("status", "pending") === "pending" ? "selected" : ""}>Pending</option>
+                        <option value="paid" ${getValue("status") === "paid" ? "selected" : ""}>Paid</option>
+                        <option value="overdue" ${getValue("status") === "overdue" ? "selected" : ""}>Overdue</option>
+                        <option value="cancelled" ${getValue("status") === "cancelled" ? "selected" : ""}>Cancelled</option>
+                    </select>
+                </div>
             </div>
         `,
         onSubmit: async (_e, _form, close) => {
+            const qty = Number(document.getElementById("billingQty").value || 0);
+            const unitRate = Number(document.getElementById("billingUnitRate").value || 0);
+            const discount = Number(document.getElementById("billingDiscount").value || 0);
+            const gstRate = Number(document.getElementById("billingGstRate").value || 18);
+            const taxableValue = Number(document.getElementById("billingAmount").value || 0) || qty * unitRate * (1 - discount / 100);
+
             const payload = {
                 companyId: document.getElementById("billingCompanyId").value,
                 type: document.getElementById("billingType").value,
-                amount: Number(document.getElementById("billingAmount").value || 0),
+                buyerName: document.getElementById("billingBuyerName").value.trim(),
+                buyerGSTIN: document.getElementById("billingBuyerGSTIN").value.trim() || "URP",
+                buyerAddress: document.getElementById("billingBuyerAddress").value.trim(),
+                placeOfSupply: document.getElementById("billingPlaceOfSupply").value.trim(),
+                reverseCharge: document.getElementById("billingReverseCharge").value,
+                hsnSac: document.getElementById("billingHSNSAC").value.trim(),
+                uom: document.getElementById("billingUOM").value.trim(),
+                qty,
+                unitRate,
+                discount,
+                gstRate,
+                buyerState: document.getElementById("billingBuyerState").value.trim(),
+                buyerStateCode: document.getElementById("billingBuyerStateCode").value.trim(),
+                shipTo: document.getElementById("billingShipTo").value.trim(),
+                shippingState: document.getElementById("billingShippingState").value.trim(),
+                amount: taxableValue,
                 description: document.getElementById("billingDescription").value.trim(),
                 invoiceDate: document.getElementById("billingInvoiceDate").value,
                 dueDate: document.getElementById("billingDueDate").value,
@@ -2266,6 +2398,23 @@ function showBillingModal(record = null) {
             close();
         }
     });
+}
+
+function numberToWords(num) {
+    const a = ["", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten", "Eleven", "Twelve", "Thirteen", "Fourteen", "Fifteen", "Sixteen", "Seventeen", "Eighteen", "Nineteen"];
+    const b = ["", "", "Twenty", "Thirty", "Forty", "Fifty", "Sixty", "Seventy", "Eighty", "Ninety"];
+    if (num < 20) return a[num];
+    if (num < 100) return b[Math.floor(num / 10)] + (num % 10 ? " " + a[num % 10] : "");
+    if (num < 1000) return a[Math.floor(num / 100)] + " Hundred" + (num % 100 ? " " + numberToWords(num % 100) : "");
+    if (num < 100000) return numberToWords(Math.floor(num / 1000)) + " Thousand" + (num % 1000 ? " " + numberToWords(num % 1000) : "");
+    if (num < 10000000) return numberToWords(Math.floor(num / 100000)) + " Lakh" + (num % 100000 ? " " + numberToWords(num % 100000) : "");
+    return numberToWords(Math.floor(num / 10000000)) + " Crore" + (num % 10000000 ? " " + numberToWords(num % 10000000) : "");
+}
+
+function toIndianCurrencyWords(amount) {
+    const rounded = Math.round(amount);
+    if (rounded === 0) return "Zero Rupees";
+    return numberToWords(rounded) + " Rupees";
 }
 
 function showBillingRecordView(record) {
@@ -2313,141 +2462,208 @@ function showBillingRecordView(record) {
 }
 
 function downloadBillingInvoiceAsPdf(record) {
+    const formatCurrency = (value) => new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", minimumFractionDigits: 2 }).format(value);
     const companyLabel = escapeHtml(companyName(record.companyId));
     const invoiceDate = formatDate(record.invoiceDate);
     const dueDate = formatDate(record.dueDate);
     const statusLabel = escapeHtml(record.status || "pending");
     const typeLabel = escapeHtml(record.type || "invoice");
-    const amountLabel = inr.format(record.amount || 0);
-    const description = escapeHtml(record.description || "Service fee") + ".";
+    const description = escapeHtml(record.description || "Billing services");
+    const qty = Number(record.qty || 1);
+    const unitRate = Number(record.unitRate || record.amount || 0);
+    const discount = Number(record.discount || 0);
+    const gstRate = Number(record.gstRate || 18);
+    const taxableValue = Number(record.amount || qty * unitRate * (1 - discount / 100));
+    const cgstRate = gstRate / 2;
+    const sgstRate = gstRate / 2;
+    const cgstAmount = Number((taxableValue * cgstRate) / 100);
+    const sgstAmount = Number((taxableValue * sgstRate) / 100);
+    const totalTax = cgstAmount + sgstAmount;
+    const totalInvoice = taxableValue + totalTax;
+    const roundedTotal = Math.round(totalInvoice);
+    const roundOff = Number((roundedTotal - totalInvoice).toFixed(2));
+    const totalWords = toIndianCurrencyWords(roundedTotal);
+
+    const supplierName = "Work Cosmo Technologies Pvt. Ltd.";
+    const supplierAddress = "123 Corporate Park, Andheri East, Mumbai, Maharashtra - 400069";
+    const supplierContact = "Phone: +91 22 1234 5678 | Email: billing@workcosmo.in";
+    const supplierGSTIN = "27AAACW1234A1Z9";
+    const supplierState = "Maharashtra";
+    const supplierStateCode = "27";
+    const supplierPAN = "AAACW1234A";
 
     const invoiceHtml = `<!doctype html>
     <html lang="en">
     <head>
         <meta charset="UTF-8" />
-        <title>Invoice ${record.id}</title>
+        <title>TAX INVOICE ${record.id}</title>
         <style>
-            body { margin: 0; padding: 0; background: #f4f6fb; font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: #0f172a; }
-            .page { width: 100%; min-height: 100vh; padding: 40px; box-sizing: border-box; }
-            .invoice-shell { max-width: 900px; margin: auto; background: #ffffff; border-radius: 28px; overflow: hidden; box-shadow: 0 30px 80px rgba(15, 23, 42, 0.12); }
-            .brand-bar { display: flex; align-items: center; justify-content: space-between; gap: 24px; padding: 32px 40px; background: linear-gradient(135deg, #3b82f6 0%, #ec4899 100%); color: #ffffff; }
-            .brand-bar .brand { display: flex; align-items: center; gap: 16px; }
-            .brand-icon { width: 52px; height: 52px; border-radius: 18px; background: rgba(255,255,255,0.2); display: grid; place-items: center; font-size: 1.35rem; font-weight: 800; }
-            .brand-title { font-size: 1.25rem; font-weight: 800; letter-spacing: -0.03em; margin: 0; }
-            .brand-subtitle { margin: 4px 0 0; color: rgba(255,255,255,0.85); font-size: 0.95rem; }
-            .headline { display: grid; grid-template-columns: 1fr auto; gap: 24px; padding: 32px 40px; }
-            .headline h1 { margin: 0; font-size: 2rem; letter-spacing: -0.04em; }
-            .headline p { margin: 8px 0 0; color: #475569; }
-            .meta-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; margin-top: 24px; }
-            .meta-card { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 20px; padding: 20px; }
-            .meta-card span { display: block; color: #94a3b8; font-size: 0.78rem; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 8px; }
-            .meta-card strong { display: block; font-size: 1.05rem; color: #0f172a; }
-            .invoice-content { padding: 0 40px 40px; }
-            .section { margin-bottom: 28px; }
-            .section-title { display: flex; justify-content: space-between; align-items: center; margin-bottom: 18px; }
-            .section-title h2 { margin: 0; font-size: 1rem; letter-spacing: 0.05em; text-transform: uppercase; color: #475569; }
-            .badge { display: inline-flex; align-items: center; justify-content: center; border-radius: 999px; padding: 8px 14px; font-size: 0.78rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; }
-            .badge.pending { background: #f8fafc; color: #2563eb; }
-            .badge.paid { background: #ecfdf5; color: #047857; }
-            .badge.overdue { background: #fee2e2; color: #b91c1c; }
-            .badge.cancelled { background: #f8fafc; color: #6b7280; }
-            .table { width: 100%; border-collapse: collapse; }
-            .table th, .table td { padding: 18px 16px; text-align: left; }
-            .table thead th { color: #64748b; font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.08em; border-bottom: 1px solid #e2e8f0; }
-            .table tbody tr { border-bottom: 1px solid #e2e8f0; }
-            .table tbody tr:last-child { border-bottom: none; }
-            .table td.description { color: #334155; }
-            .table td.amount { font-weight: 800; color: #0f172a; }
-            .total-row td { border-top: 2px solid #e2e8f0; }
-            .footer { padding: 0 40px 40px; color: #64748b; font-size: 0.92rem; line-height: 1.7; }
-            .footer .note { margin-top: 12px; }
-            .logo-line { color: #ffffff; opacity: 0.9; font-size: 0.9rem; }
+            @page { size: A4 portrait; margin: 12mm; }
+            body { margin: 0; padding: 0; background: #f8fafc; font-family: Inter, Arial, sans-serif; color: #1f2937; }
+            .page { width: 210mm; min-height: 297mm; margin: auto; padding: 12mm; box-sizing: border-box; }
+            .wrapper { border: 1px solid #d1d5db; border-radius: 16px; overflow: hidden; background: #ffffff; }
+            .header { display: flex; justify-content: space-between; align-items: flex-start; gap: 24px; background: #111827; color: #ffffff; padding: 24px 28px; }
+            .header-left h1 { margin: 0 0 12px; font-size: 28px; letter-spacing: 0.12em; text-transform: uppercase; }
+            .header-left p { margin: 4px 0; line-height: 1.6; color: #d1d5db; }
+            .header-right { text-align: right; }
+            .header-right .title { font-size: 22px; font-weight: 800; margin-bottom: 10px; letter-spacing: 0.08em; }
+            .header-right .meta { background: #1f2937; padding: 16px 18px; border-radius: 14px; }
+            .header-right .meta div { margin-bottom: 8px; font-size: 0.88rem; color: #d1d5db; }
+            .section { padding: 24px 28px; }
+            .section-title { font-size: 13px; font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase; margin-bottom: 18px; color: #111827; }
+            .grid-2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+            .card { background: #f8fafc; border: 1px solid #e5e7eb; border-radius: 16px; padding: 18px; }
+            .card strong { display: block; margin-bottom: 10px; font-size: 0.95rem; color: #111827; }
+            .card p { margin: 0; font-size: 0.88rem; line-height: 1.7; color: #475569; }
+            .invoice-table { width: 100%; border-collapse: collapse; font-size: 0.84rem; }
+            .invoice-table th, .invoice-table td { padding: 14px 12px; border: 1px solid #e5e7eb; }
+            .invoice-table th { background: #e2e8f0; color: #111827; text-align: left; font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.06em; }
+            .invoice-table tbody tr:nth-child(odd) { background: #f8fafc; }
+            .text-right { text-align: right; }
+            .summary-table { width: 100%; border-collapse: collapse; margin-top: 12px; }
+            .summary-table td { padding: 10px 12px; border: 1px solid #e5e7eb; }
+            .summary-table td.label { color: #475569; }
+            .summary-table td.value { text-align: right; font-weight: 700; }
+            .total-value { font-size: 1.05rem; font-weight: 800; }
+            .footer-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin-top: 18px; }
+            .footer-card { background: #f8fafc; border: 1px solid #e5e7eb; border-radius: 16px; padding: 16px; font-size: 0.86rem; color: #475569; }
+            .footer-card strong { display: block; margin-bottom: 10px; color: #111827; }
+            .signature { min-height: 88px; border-top: 1px solid #cbd5e1; margin-top: 24px; padding-top: 12px; color: #475569; }
         </style>
     </head>
     <body>
         <div class="page">
-            <div class="invoice-shell">
-                <div class="brand-bar">
-                    <div class="brand">
-                        <div class="brand-icon">WC</div>
-                        <div>
-                            <div class="brand-title">Work Cosmo</div>
-                            <div class="brand-subtitle">Access Control Billing Center</div>
+            <div class="wrapper">
+                <div class="header">
+                    <div class="header-left">
+                        <h1>Tax Invoice</h1>
+                        <p><strong>${supplierName}</strong></p>
+                        <p>${supplierAddress}</p>
+                        <p>${supplierContact}</p>
+                        <p>GSTIN: ${supplierGSTIN}</p>
+                        <p>State: ${supplierState} - ${supplierStateCode}</p>
+                        <p>PAN: ${supplierPAN}</p>
+                    </div>
+                    <div class="header-right">
+                        <div class="title">TAX INVOICE</div>
+                        <div class="meta">
+                            <div>Invoice No: ${escapeHtml(record.id)}</div>
+                            <div>Date: ${invoiceDate}</div>
+                            <div>Due Date: ${dueDate}</div>
+                            <div>Reverse Charge: ${escapeHtml(record.reverseCharge || "No")}</div>
                         </div>
                     </div>
-                    <div class="logo-line">www.workcosmo.in</div>
                 </div>
-                <div class="headline">
-                    <div>
-                        <h1>Invoice</h1>
-                        <p>Professional invoice generated for manual billing and payment tracking.</p>
+                <div class="section">
+                    <div class="section-title">Billing & Shipping Details</div>
+                    <div class="grid-2">
+                        <div class="card">
+                            <strong>Bill To</strong>
+                            <p>${escapeHtml(record.buyerName || companyLabel)}</p>
+                            <p>${escapeHtml(record.buyerAddress || "-")}</p>
+                            <p>GSTIN: ${escapeHtml(record.buyerGSTIN || "URP")}</p>
+                            <p>State: ${escapeHtml(record.buyerState || "Maharashtra")} - ${escapeHtml(record.buyerStateCode || "27")}</p>
+                        </div>
+                        <div class="card">
+                            <strong>Ship To</strong>
+                            <p>${escapeHtml(record.shipTo || record.buyerName || companyLabel)}</p>
+                            <p>${escapeHtml(record.shippingState || record.buyerState || "Maharashtra")}</p>
+                            <p>State Code: ${escapeHtml(record.buyerStateCode || "27")}</p>
+                        </div>
                     </div>
-                    <div class="badge ${record.status || "pending"}">${statusLabel}</div>
                 </div>
-                <div class="invoice-content">
-                    <div class="meta-grid">
-                        <div class="meta-card">
-                            <span>Invoice Number</span>
-                            <strong>${escapeHtml(record.id)}</strong>
-                        </div>
-                        <div class="meta-card">
-                            <span>Invoice Date</span>
-                            <strong>${invoiceDate}</strong>
-                        </div>
-                        <div class="meta-card">
-                            <span>Due Date</span>
-                            <strong>${dueDate}</strong>
-                        </div>
-                        <div class="meta-card">
-                            <span>Type</span>
-                            <strong>${typeLabel}</strong>
-                        </div>
-                    </div>
-
-                    <div class="section">
-                        <div class="section-title">
-                            <h2>Billed To</h2>
-                        </div>
-                        <div style="display:flex; align-items:flex-start; gap:24px;">
-                            <div>
-                                <div style="font-weight: 700; color: #0f172a; font-size: 1rem;">${companyLabel}</div>
-                                <div style="margin-top: 8px; color: #475569;">Billing entry generated from the access control dashboard.</div>
-                            </div>
-                            <div style="min-width: 220px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 18px; padding: 16px;">
-                                <div style="font-size: 0.72rem; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 10px;">Invoice Summary</div>
-                                <div style="font-size: 1.8rem; font-weight: 800; color: #0f172a;">${amountLabel}</div>
-                                <div style="margin-top: 8px; color: #475569;">Due by ${dueDate}</div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="section">
-                        <div class="section-title">
-                            <h2>Details</h2>
-                        </div>
-                        <table class="table">
+                <div class="section">
+                    <div class="section-title">Itemized Details</div>
+                    <table class="invoice-table">
+                        <thead>
+                            <tr>
+                                <th style="width:5%;">S.No.</th>
+                                <th style="width:36%;">Description</th>
+                                <th style="width:10%;">HSN / SAC</th>
+                                <th style="width:8%;">UOM</th>
+                                <th style="width:8%;" class="text-right">Qty</th>
+                                <th style="width:12%;" class="text-right">Rate</th>
+                                <th style="width:10%;" class="text-right">Discount</th>
+                                <th style="width:11%;" class="text-right">Taxable</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td>1</td>
+                                <td>${description}</td>
+                                <td>${escapeHtml(record.hsnSac || "998313")}</td>
+                                <td>${escapeHtml(record.uom || "Nos")}</td>
+                                <td class="text-right">${qty}</td>
+                                <td class="text-right">${formatCurrency(unitRate)}</td>
+                                <td class="text-right">${discount}%</td>
+                                <td class="text-right">${formatCurrency(taxableValue)}</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                <div class="section" style="display:grid; grid-template-columns: 1fr 1fr; gap:16px;">
+                    <div class="card">
+                        <strong>Tax Split-up Matrix</strong>
+                        <table class="invoice-table">
                             <thead>
                                 <tr>
-                                    <th>Description</th>
-                                    <th>Amount</th>
+                                    <th>HSN</th>
+                                    <th>Taxable</th>
+                                    <th>CGST %</th>
+                                    <th>CGST Amt</th>
+                                    <th>SGST %</th>
+                                    <th>SGST Amt</th>
+                                    <th>Total Tax</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 <tr>
-                                    <td class="description">${description}</td>
-                                    <td class="amount">${amountLabel}</td>
-                                </tr>
-                                <tr class="total-row">
-                                    <td style="font-weight:700;">Total</td>
-                                    <td class="amount">${amountLabel}</td>
+                                    <td>${escapeHtml(record.hsnSac || "998313")}</td>
+                                    <td class="text-right">${formatCurrency(taxableValue)}</td>
+                                    <td class="text-right">${cgstRate}%</td>
+                                    <td class="text-right">${formatCurrency(cgstAmount)}</td>
+                                    <td class="text-right">${sgstRate}%</td>
+                                    <td class="text-right">${formatCurrency(sgstAmount)}</td>
+                                    <td class="text-right">${formatCurrency(totalTax)}</td>
                                 </tr>
                             </tbody>
                         </table>
                     </div>
+                    <div class="card">
+                        <strong>Grand Totals</strong>
+                        <table class="summary-table">
+                            <tr><td class="label">Total Taxable Value</td><td class="value">${formatCurrency(taxableValue)}</td></tr>
+                            <tr><td class="label">Central Tax (CGST)</td><td class="value">${formatCurrency(cgstAmount)}</td></tr>
+                            <tr><td class="label">State Tax (SGST)</td><td class="value">${formatCurrency(sgstAmount)}</td></tr>
+                            <tr><td class="label">Integrated Tax (IGST)</td><td class="value">₹0.00</td></tr>
+                            <tr><td class="label">Cess</td><td class="value">₹0.00</td></tr>
+                            <tr><td class="label">Round Off</td><td class="value">${formatCurrency(roundOff)}</td></tr>
+                            <tr><td class="label total-value">Invoice Value</td><td class="value total-value">${formatCurrency(roundedTotal)}</td></tr>
+                        </table>
+                        <p style="margin-top:14px; font-size:0.9rem; color:#475569;"><strong>Amount in Words:</strong><br />${escapeHtml(totalWords)} Only</p>
+                    </div>
                 </div>
-                <div class="footer">
-                    <div>Thank you for choosing Work Cosmo. If you have any questions about this invoice, reach out to support@workcosmo.in.</div>
-                    <div class="note">Please retain this document for your records.</div>
+                <div class="section">
+                    <div class="footer-grid">
+                        <div class="footer-card">
+                            <strong>Bank & Payment Details</strong>
+                            Bank Name: State Bank of India<br />
+                            Account Name: Work Cosmo Technologies Pvt. Ltd.<br />
+                            Account Number: 123456789012<br />
+                            IFSC Code: SBIN0001234<br />
+                            Branch: Mumbai Corporate Branch
+                        </div>
+                        <div class="footer-card">
+                            <strong>Terms & Conditions</strong>
+                            1. Goods once sold cannot be taken back or exchanged.<br />
+                            2. Interest @ 18% p.a. will be charged if payment is not received within due date.<br />
+                            3. All disputes are subject to Mumbai jurisdiction.
+                        </div>
+                        <div class="footer-card">
+                            <strong>For Work Cosmo Technologies Pvt. Ltd.</strong>
+                            <div class="signature">Authorized Signatory</div>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
