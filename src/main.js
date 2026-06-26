@@ -292,6 +292,31 @@ function renderView() {
     }
 }
 
+function metric(title, value, icon = "fa-chart-simple", color = "blue") {
+    const palette = {
+        blue: "from-blue-500 to-indigo-500",
+        emerald: "from-emerald-400 to-emerald-500",
+        indigo: "from-indigo-500 to-violet-500",
+        rose: "from-rose-500 to-pink-500",
+        amber: "from-amber-400 to-orange-500",
+        soft: "from-slate-400 to-slate-500"
+    };
+    const grad = palette[color] || palette.blue;
+    return `
+        <div class="p-4 rounded-2xl bg-white/70 border border-slate-100 shadow-sm">
+            <div class="flex items-center gap-4">
+                <div class="w-12 h-12 rounded-lg bg-gradient-to-br ${grad} flex items-center justify-center text-white text-lg">
+                    <i class="fas ${icon}"></i>
+                </div>
+                <div>
+                    <div class="text-xs font-black uppercase tracking-wider text-slate-500">${escapeHtml(title)}</div>
+                    <div class="text-2xl font-extrabold text-slate-900 mt-1">${escapeHtml(String(value))}</div>
+                </div>
+            </div>
+        </div>
+    `;
+}
+
 function renderOverview() {
     const totalCompanies = state.companies.length;
     const totalUsers = state.users.length;
