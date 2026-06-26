@@ -2454,15 +2454,16 @@ function downloadBillingInvoiceAsPdf(record) {
     </body>
     </html>`;
 
-    const printWindow = window.open("", "_blank", "noopener,noreferrer");
-    if (!printWindow) {
+    const blob = new Blob([invoiceHtml], { type: "text/html" });
+    const url = URL.createObjectURL(blob);
+    const newTab = window.open(url, "_blank");
+    if (!newTab) {
         toast("Popup blocked. Allow popups to view invoice.", true);
+        URL.revokeObjectURL(url);
         return;
     }
 
-    printWindow.document.write(invoiceHtml);
-    printWindow.document.close();
-    printWindow.focus();
+    newTab.focus();
 }
 
 function showRoleModal() {
