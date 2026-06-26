@@ -15,12 +15,7 @@ import {
     setRecord,
     listByCompany
 } from "./services/firestoreService.js";
-import {
-    createBillingRecord,
-    listBillingRecords,
-    updateBillingRecord,
-    deleteBillingRecord
-} from "./services/billingService.js";
+// billing features removed
 import { escapeHtml, formatDate, formatDateTime, inr, initials, percent } from "./utils/format.js";
 import { toast } from "./utils/toast.js";
 import { listSystemRoles } from "./services/roleService.js";
@@ -55,12 +50,7 @@ const views = {
         title: "Roles & Permissions",
         subtitle: "Fixed authorization profiles and permissions matrix for Work Cosmo."
     },
-    billing: {
-        icon: "fa-file-invoice",
-        label: "Billing",
-        title: "Billing Ledger",
-        subtitle: "Create, view, and manage invoices and payment records for client workspaces."
-    },
+    // billing view removed
     contacts: {
         icon: "fa-address-book",
         label: "Contacts",
@@ -81,13 +71,13 @@ let state = {
     companies: [],
     users: [],
     emails: [],
-    billingRecords: [],
+    // billingRecords removed
     contactMessages: [],
     emailSearch: "",
     userSearch: "",
     userCompanyFilter: "",
     userRoleFilter: "",
-    billingCompanyFilter: "",
+    // billingCompanyFilter removed
     contactStatusFilter: "",
     contactSearch: ""
 };
@@ -109,11 +99,10 @@ document.addEventListener("DOMContentLoaded", () => {
 });
 
 async function loadData() {
-    const [companies, users, emails, billingRecords, contactMessages] = await Promise.all([
+    const [companies, users, emails, contactMessages] = await Promise.all([
         safeList("companies"),
         safeList("users"),
         safeList("emails"),
-        safeList("billingRecords"),
         safeList("contact_messages")
     ]);
 
@@ -122,7 +111,6 @@ async function loadData() {
         companies,
         users,
         emails,
-        billingRecords,
         contactMessages
     };
 
@@ -192,28 +180,11 @@ function renderShell() {
             )
             .join("")}
                 </nav>
-                <div class="mt-auto p-4 bg-white rounded-xl border border-slate-200 shadow-sm">
+                    <div class="mt-auto p-4 bg-white rounded-xl border border-slate-200 shadow-sm">
                     <div class="flex items-center gap-3 mb-3">
                         <div class="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center text-blue-600">
                             <i class="fas fa-user-shield"></i>
                         </div>
-
-    function numberToWords(num) {
-        const a = ["", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten", "Eleven", "Twelve", "Thirteen", "Fourteen", "Fifteen", "Sixteen", "Seventeen", "Eighteen", "Nineteen"];
-        const b = ["", "", "Twenty", "Thirty", "Forty", "Fifty", "Sixty", "Seventy", "Eighty", "Ninety"];
-        if (num < 20) return a[num];
-        if (num < 100) return b[Math.floor(num / 10)] + (num % 10 ? " " + a[num % 10] : "");
-        if (num < 1000) return a[Math.floor(num / 100)] + " Hundred" + (num % 100 ? " " + numberToWords(num % 100) : "");
-        if (num < 100000) return numberToWords(Math.floor(num / 1000)) + " Thousand" + (num % 1000 ? " " + numberToWords(num % 1000) : "");
-        if (num < 10000000) return numberToWords(Math.floor(num / 100000)) + " Lakh" + (num % 100000 ? " " + numberToWords(num % 100000) : "");
-        return numberToWords(Math.floor(num / 10000000)) + " Crore" + (num % 10000000 ? " " + numberToWords(num % 10000000) : "");
-    }
-
-    function toIndianCurrencyWords(amount) {
-        const rounded = Math.round(amount);
-        if (rounded === 0) return "Zero Rupees";
-        return numberToWords(rounded) + " Rupees";
-    }
                         <div class="flex-1 overflow-hidden">
                             <strong class="block text-sm text-slate-800 truncate">${escapeHtml(state.session.company?.companyName || "Platform Admin")}</strong>
                             <span class="block text-xs text-slate-500 mt-0.5 truncate">${state.session.adminMode ? "Super Admin" : escapeHtml(state.session.user?.role || "Admin")}</span>
@@ -312,8 +283,6 @@ function renderView() {
             return renderUsers();
         case "roles":
             return renderRoles();
-        case "billing":
-            return renderBilling();
         case "contacts":
             return renderContacts();
         case "emails":
@@ -326,38 +295,28 @@ function renderView() {
 function renderOverview() {
     const totalCompanies = state.companies.length;
     const totalUsers = state.users.length;
-    const totalInvoices = state.billingRecords.length;
-    const totalRevenue = state.billingRecords.reduce((acc, r) => acc + Number(r.amount || 0), 0);
-    const overdueBills = state.billingRecords.filter((r) => r.status === "overdue").length;
-
-    const latestBilling = [...state.billingRecords]
-        .sort((a, b) => {
-            const aDate = a.invoiceDate ? new Date(a.invoiceDate) : new Date(0);
-            const bDate = b.invoiceDate ? new Date(b.invoiceDate) : new Date(0);
-            return bDate - aDate;
-        })
-        .slice(0, 5);
+    const totalLeads = state.contactMessages.length;
+    const totalEmails = state.emails.length;
 
     return `
         <div class="grid gap-8">
             <section class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                 ${metric("Companies", totalCompanies, "fa-building", "emerald")}
                 ${metric("Total Users", totalUsers, "fa-users", "blue")}
-                ${metric("Total Invoices", totalInvoices, "fa-file-invoice", "indigo")}
-                ${metric("Revenue", inr.format(totalRevenue), "fa-indian-rupee-sign", "rose")}
+                ${metric("Leads", totalLeads, "fa-address-book", "indigo")}
+                ${metric("Emails", totalEmails, "fa-envelope", "rose")}
             </section>
 
             <div class="grid grid-cols-1 lg:grid-cols-[2fr_1fr] gap-8">
                 <div class="bg-white/70 backdrop-blur-xl border border-slate-200 rounded-3xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] overflow-hidden">
                     <div class="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
                         <div>
-                            <h3 class="text-lg font-black text-slate-800">Latest Billing Activity</h3>
-                            <p class="text-xs text-slate-500 font-medium">Recent invoices and payments</p>
+                            <h3 class="text-lg font-black text-slate-800">Billing Disabled</h3>
+                            <p class="text-xs text-slate-500 font-medium">Billing features have been removed from this panel.</p>
                         </div>
-                        ${badge(overdueBills + " Overdue", "danger")}
                     </div>
-                    <div class="p-0 overflow-x-auto">
-                        ${billingTable(latestBilling)}
+                    <div class="p-6">
+                        ${empty("Billing section removed.")}
                     </div>
                 </div>
                 <div class="grid gap-8 items-start">
@@ -635,50 +594,7 @@ function renderRoles() {
     `;
 }
 
-function renderBilling() {
-    const totalInvoices = state.billingRecords.length;
-    const paidInvoices = state.billingRecords.filter(r => r.status === 'paid').length;
-    const overdueInvoices = state.billingRecords.filter(r => r.status === 'overdue').length;
-    const totalAmount = state.billingRecords.reduce((acc, r) => acc + Number(r.amount || 0), 0);
-
-    const filtered = state.billingRecords.filter(record => {
-        const companyFilter = state.billingCompanyFilter || "";
-        return !companyFilter || record.companyId === companyFilter;
-    });
-
-    return `
-        <div class="grid gap-8">
-            <section class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                ${metric("Total Invoices", totalInvoices, "fa-file-invoice", "blue")}
-                ${metric("Paid", paidInvoices, "fa-check-double", "emerald")}
-                ${metric("Overdue", overdueInvoices, "fa-triangle-exclamation", "rose")}
-                ${metric("Total Volume", inr.format(totalAmount), "fa-indian-rupee-sign", "indigo")}
-            </section>
-
-            <div class="bg-white/90 backdrop-blur-lg border border-slate-200 rounded-3xl p-6 shadow-lg shadow-slate-200/40">
-                <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4 border-b border-slate-100 pb-5">
-                    <div>
-                        <h3 class="text-xl font-black text-slate-800">Billing Ledger</h3>
-                        <p class="text-slate-500 text-sm font-medium">Manage manual invoices and payment records.</p>
-                    </div>
-                    <div class="flex gap-3">
-                        <select id="billingCompanyFilter" class="min-h-[42px] px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 transition-all text-sm">
-                            <option value="">All Companies</option>
-                            ${state.companies.map((c) => `<option value="${c.id}" ${state.billingCompanyFilter === c.id ? "selected" : ""}>${escapeHtml(c.companyName)}</option>`).join("")}
-                        </select>
-                        <button id="btnOpenBillingModal" class="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-gradient-to-r from-blue-600 to-pink-500 text-slate-900 font-bold rounded-xl hover:shadow-lg hover:shadow-pink-500/20 hover:scale-[1.02] transition-all text-sm">
-                            <i class="fa-solid fa-file-invoice-dollar"></i> Create Record
-                        </button>
-                    </div>
-                </div>
-
-                <div class="mt-4">
-                    ${billingTable(filtered)}
-                </div>
-            </div>
-        </div>
-    `;
-}
+// billing view removed
 
 function renderContacts() {
     const totalLeads = state.contactMessages.length;
@@ -953,9 +869,6 @@ function bindShellEvents() {
             case "users":
                 showUserModal();
                 break;
-            case "billing":
-                showBillingModal();
-                break;
             case "roles":
                 showRoleModal();
                 break;
@@ -972,7 +885,6 @@ function bindViewEvents() {
     // Setup Modal Triggers
     document.getElementById("btnOpenCompanyModal")?.addEventListener("click", showCompanyModal);
     document.getElementById("btnOpenUserModal")?.addEventListener("click", showUserModal);
-    document.getElementById("btnOpenBillingModal")?.addEventListener("click", showBillingModal);
     document.getElementById("btnOpenRoleModal")?.addEventListener("click", showRoleModal);
     document.getElementById("btnAddEmail")?.addEventListener("click", () => showEmailModal());
     document.getElementById("emailSearch")?.addEventListener("input", (event) => {
@@ -985,11 +897,7 @@ function bindViewEvents() {
         }
     });
 
-    // Billing View Interactions
-    document.getElementById("billingCompanyFilter")?.addEventListener("change", (event) => {
-        state.billingCompanyFilter = event.target.value || "";
-        renderShell();
-    });
+    // Billing view removed
 
     // Contacts View Interactions
     document.getElementById("contactSearch")?.addEventListener("input", (event) => {
@@ -1483,28 +1391,16 @@ async function handleRecordAction(button) {
         toast("Record not found.", true);
         return;
     }
-
     if (action === "view") {
-        if (collectionName === "billingRecords") {
-            showBillingRecordView(record);
-            return;
-        }
         openRecordModal(`View ${collectionName}/${id}`, JSON.stringify(record, null, 2), true);
         return;
     }
 
     if (action === "pdf") {
-        if (collectionName === "billingRecords") {
-            downloadBillingInvoiceAsPdf(record);
-            return;
-        }
+        // PDF/export action removed for billing
     }
 
     if (action === "edit") {
-        if (collectionName === "billingRecords") {
-            showBillingModal(record);
-            return;
-        }
         if (collectionName === "emails") {
             showEmailModal(record);
             return;
@@ -1560,7 +1456,7 @@ function findRecord(collectionName, id) {
         accessPasses: state.accessPasses,
         purchaseRequests: state.purchaseRequests,
         emails: state.emails,
-        billingRecords: state.billingRecords
+        // billingRecords removed
     };
     return collections[collectionName]?.find((item) => item.id === id);
 }
@@ -1727,47 +1623,7 @@ function userTable(users) {
     `;
 }
 
-function billingTable(records) {
-    if (!records.length) return empty("No billing records found.");
-    return `
-        <div class="table-wrap overflow-x-auto">
-            <table class="w-full text-left">
-                <thead>
-                    <tr class="border-b border-slate-200 text-[10px] font-black uppercase tracking-widest text-slate-500">
-                        <th class="px-6 py-4">Company</th>
-                        <th class="px-6 py-4">Type</th>
-                        <th class="px-6 py-4">Amount</th>
-                        <th class="px-6 py-4">Status</th>
-                        <th class="px-6 py-4">Dates</th>
-                        <th class="px-6 py-4">Actions</th>
-                    </tr>
-                </thead>
-                <tbody class="divide-y divide-slate-100">
-                    ${records
-            .map(
-                (record) => `
-                        <tr class="hover:bg-slate-50 transition-colors">
-                            <td class="px-6 py-4">
-                                <div class="font-bold text-slate-800">${escapeHtml(companyName(record.companyId))}</div>
-                                <div class="text-[10px] text-slate-500 font-medium">${escapeHtml(record.description || "")}</div>
-                            </td>
-                            <td class="px-6 py-4">${badge(record.type || "invoice", record.type === "payment" ? "success" : "info")}</td>
-                            <td class="px-6 py-4 font-black text-slate-700">${inr.format(record.amount || 0)}</td>
-                            <td class="px-6 py-4">${badge(record.status || "pending", statusTone(record.status))}</td>
-                            <td class="px-6 py-4">
-                                <div class="text-xs text-slate-800 font-semibold">Inv: ${formatDate(record.invoiceDate)}</div>
-                                <div class="text-[10px] text-slate-500 mt-0.5">Due: ${formatDate(record.dueDate)}</div>
-                            </td>
-                            <td class="px-6 py-4">${recordActions("billingRecords", record.id)}</td>
-                        </tr>
-                    `
-            )
-            .join("")}
-                </tbody>
-            </table>
-        </div>
-    `;
-}
+// billing table removed
 
 function contactsTable(leads) {
     if (!leads.length) return empty("No website leads found.");
@@ -1823,9 +1679,7 @@ function recordActions(collectionName, id) {
         recordActionButton("delete", collectionName, id, "fa-trash", "Delete", true)
     ];
 
-    if (collectionName === "billingRecords") {
-        actions.push(recordActionButton("pdf", collectionName, id, "fa-file-pdf", "Export"));
-    }
+    // billing export action removed
 
     return `<div class="flex gap-2">${actions.join("")}</div>`;
 }
@@ -1872,56 +1726,6 @@ function companyUsageList() {
         })
         .join("")}</div>`;
 }
-
-function planCard(plan) {
-    const price = plan.priceMonthly ? `${inr.format(plan.priceMonthly)}/month` : "Dynamic pricing";
-    return `
-        <div class="panel plan-card">
-            <div>
-                <h3>${plan.name}</h3>
-                <div class="plan-price">${price}</div>
-                <p class="muted">${plan.maxUsers ? `${plan.maxUsers} max users` : "Custom user limits"}</p>
-            </div>
-            <div class="plan-features">
-                ${plan.features.map((feature) => `<span><i class="fas fa-check"></i> ${featureLabel(feature)}</span>`).join("")}
-            </div>
-        </div>
-    `;
-}
-
-function metric(label, value, icon, color = "blue") {
-    const colors = {
-        blue: "from-blue-500 to-indigo-500 shadow-blue-500/20 text-blue-50",
-        emerald: "from-emerald-400 to-teal-500 shadow-emerald-500/20 text-emerald-50",
-        amber: "from-amber-400 to-orange-400 shadow-amber-500/20 text-amber-50",
-        indigo: "from-indigo-500 to-violet-500 shadow-indigo-500/20 text-indigo-50",
-        rose: "from-rose-400 to-pink-500 shadow-rose-500/20 text-rose-50"
-    };
-
-    const selected = colors[color] || colors.blue;
-
-    return `
-        <div class="bg-white border border-slate-100 rounded-3xl p-6 flex items-center gap-6 group hover:-translate-y-1 hover:shadow-2xl hover:shadow-slate-200/50 transition-all duration-300 relative overflow-hidden">
-            <div class="w-14 h-14 rounded-2xl bg-gradient-to-br ${selected.split(" ").slice(0, 2).join(" ")} flex items-center justify-center text-slate-900 text-xl shadow-lg ${selected.split(" ")[2]} group-hover:scale-110 transition-transform">
-                <i class="fas ${icon}"></i>
-            </div>
-            <div>
-                <div class="text-xs font-black uppercase tracking-widest text-slate-500 mb-1">${label}</div>
-                <div class="text-3xl font-black text-slate-900">${value}</div>
-            </div>
-        </div>
-    `;
-}
-
-function domainItem(title, value) {
-    return `
-        <div class="p-4 rounded-xl bg-slate-100/50 border border-slate-200 flex justify-between items-center group hover:bg-white/10 transition-all">
-            <strong class="text-sm font-bold">${escapeHtml(title)}</strong>
-            <span class="text-xs text-slate-500 font-medium">${escapeHtml(value)}</span>
-        </div>
-    `;
-}
-
 function badge(text, tone = "soft") {
     const tones = {
         success: "bg-emerald-500/10 text-emerald-400 border-emerald-500/20",
@@ -2201,486 +2005,7 @@ function showUserModal() {
     });
 }
 
-function showBillingModal(record = null) {
-    const isEdit = Boolean(record?.id);
-    const title = isEdit ? "Edit Billing Entry" : "Create Billing Entry";
-    const submitLabel = isEdit ? "Save Changes" : "Save Record";
-    const invoiceDate = record?.invoiceDate ? record.invoiceDate.split("T")[0] : "";
-    const dueDate = record?.dueDate ? record.dueDate.split("T")[0] : "";
-
-    const getValue = (key, defaultValue = "") => record?.[key] ?? defaultValue;
-
-    openModal({
-        title,
-        submitLabel,
-        content: `
-            <div class="grid gap-4">
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div class="grid gap-1.5">
-                        <label for="billingCompanyId" class="text-sm font-bold text-slate-700">Company</label>
-                        <select id="billingCompanyId" required class="w-full min-h-[42px] px-3 py-2 bg-white border border-slate-200 rounded-xl text-slate-900 outline-none focus:border-pink-500 focus:ring-4 focus:ring-pink-500/10 transition-all">
-                            <option value="">Select company</option>
-                            ${state.companies
-                                .map((company) => `
-                                    <option value="${company.id}" ${getValue("companyId") === company.id ? "selected" : ""}>
-                                        ${escapeHtml(company.companyName)}
-                                    </option>`)
-                                .join("")}
-                        </select>
-                    </div>
-                    <div class="grid gap-1.5">
-                        <label for="billingType" class="text-sm font-bold text-slate-700">Record Type</label>
-                        <select id="billingType" required class="w-full min-h-[42px] px-3 py-2 bg-white border border-slate-200 rounded-xl text-slate-900 outline-none focus:border-pink-500 focus:ring-4 focus:ring-pink-500/10 transition-all">
-                            <option value="invoice" ${getValue("type", "invoice") === "invoice" ? "selected" : ""}>Invoice</option>
-                            <option value="payment" ${getValue("type") === "payment" ? "selected" : ""}>Payment Receipt</option>
-                        </select>
-                    </div>
-                </div>
-
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div class="grid gap-1.5">
-                        <label for="billingBuyerName" class="text-sm font-bold text-slate-700">Bill To / Buyer Name</label>
-                        <input id="billingBuyerName" type="text" required value="${escapeHtml(getValue("buyerName"))}" class="w-full min-h-[42px] px-3 py-2 bg-white border border-slate-200 rounded-xl text-slate-900 outline-none focus:border-pink-500 focus:ring-4 focus:ring-pink-500/10 transition-all">
-                    </div>
-                    <div class="grid gap-1.5">
-                        <label for="billingBuyerGSTIN" class="text-sm font-bold text-slate-700">Buyer GSTIN</label>
-                        <input id="billingBuyerGSTIN" type="text" value="${escapeHtml(getValue("buyerGSTIN", "URP"))}" placeholder="URP if unregistered" class="w-full min-h-[42px] px-3 py-2 bg-white border border-slate-200 rounded-xl text-slate-900 outline-none focus:border-pink-500 focus:ring-4 focus:ring-pink-500/10 transition-all">
-                    </div>
-                </div>
-
-                <div class="grid gap-1.5">
-                    <label for="billingBuyerAddress" class="text-sm font-bold text-slate-700">Buyer Address</label>
-                    <textarea id="billingBuyerAddress" rows="2" class="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-slate-900 outline-none focus:border-pink-500 focus:ring-4 focus:ring-pink-500/10 transition-all">${escapeHtml(getValue("buyerAddress"))}</textarea>
-                </div>
-
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div class="grid gap-1.5">
-                        <label for="billingPlaceOfSupply" class="text-sm font-bold text-slate-700">Place of Supply</label>
-                        <input id="billingPlaceOfSupply" type="text" value="${escapeHtml(getValue("placeOfSupply", "Maharashtra - 27"))}" class="w-full min-h-[42px] px-3 py-2 bg-white border border-slate-200 rounded-xl text-slate-900 outline-none focus:border-pink-500 focus:ring-4 focus:ring-pink-500/10 transition-all">
-                    </div>
-                    <div class="grid gap-1.5">
-                        <label for="billingReverseCharge" class="text-sm font-bold text-slate-700">Reverse Charge Applicable</label>
-                        <select id="billingReverseCharge" class="w-full min-h-[42px] px-3 py-2 bg-white border border-slate-200 rounded-xl text-slate-900 outline-none focus:border-pink-500 focus:ring-4 focus:ring-pink-500/10 transition-all">
-                            <option value="No" ${getValue("reverseCharge", "No") === "No" ? "selected" : ""}>No</option>
-                            <option value="Yes" ${getValue("reverseCharge") === "Yes" ? "selected" : ""}>Yes</option>
-                        </select>
-                    </div>
-                </div>
-
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div class="grid gap-1.5">
-                        <label for="billingHSNSAC" class="text-sm font-bold text-slate-700">HSN / SAC Code</label>
-                        <input id="billingHSNSAC" type="text" value="${escapeHtml(getValue("hsnSac", "998313"))}" class="w-full min-h-[42px] px-3 py-2 bg-white border border-slate-200 rounded-xl text-slate-900 outline-none focus:border-pink-500 focus:ring-4 focus:ring-pink-500/10 transition-all">
-                    </div>
-                    <div class="grid gap-1.5">
-                        <label for="billingUOM" class="text-sm font-bold text-slate-700">UOM</label>
-                        <input id="billingUOM" type="text" value="${escapeHtml(getValue("uom", "Nos"))}" class="w-full min-h-[42px] px-3 py-2 bg-white border border-slate-200 rounded-xl text-slate-900 outline-none focus:border-pink-500 focus:ring-4 focus:ring-pink-500/10 transition-all">
-                    </div>
-                </div>
-
-                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div class="grid gap-1.5">
-                        <label for="billingQty" class="text-sm font-bold text-slate-700">Quantity</label>
-                        <input id="billingQty" type="number" required min="0" value="${getValue("qty", 1)}" class="w-full min-h-[42px] px-3 py-2 bg-white border border-slate-200 rounded-xl text-slate-900 outline-none focus:border-pink-500 focus:ring-4 focus:ring-pink-500/10 transition-all">
-                    </div>
-                    <div class="grid gap-1.5">
-                        <label for="billingUnitRate" class="text-sm font-bold text-slate-700">Unit Rate (₹)</label>
-                        <input id="billingUnitRate" type="number" required min="0" value="${getValue("unitRate", 0)}" class="w-full min-h-[42px] px-3 py-2 bg-white border border-slate-200 rounded-xl text-slate-900 outline-none focus:border-pink-500 focus:ring-4 focus:ring-pink-500/10 transition-all">
-                    </div>
-                    <div class="grid gap-1.5">
-                        <label for="billingDiscount" class="text-sm font-bold text-slate-700">Discount (%)</label>
-                        <input id="billingDiscount" type="number" min="0" max="100" value="${getValue("discount", 0)}" class="w-full min-h-[42px] px-3 py-2 bg-white border border-slate-200 rounded-xl text-slate-900 outline-none focus:border-pink-500 focus:ring-4 focus:ring-pink-500/10 transition-all">
-                    </div>
-                </div>
-
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div class="grid gap-1.5">
-                        <label for="billingGstRate" class="text-sm font-bold text-slate-700">GST Rate (%)</label>
-                        <input id="billingGstRate" type="number" required min="0" value="${getValue("gstRate", 18)}" class="w-full min-h-[42px] px-3 py-2 bg-white border border-slate-200 rounded-xl text-slate-900 outline-none focus:border-pink-500 focus:ring-4 focus:ring-pink-500/10 transition-all">
-                    </div>
-                    <div class="grid gap-1.5">
-                        <label for="billingAmount" class="text-sm font-bold text-slate-700">Taxable Value (₹)</label>
-                        <input id="billingAmount" type="number" required min="0" value="${getValue("amount", 0)}" class="w-full min-h-[42px] px-3 py-2 bg-white border border-slate-200 rounded-xl text-slate-900 outline-none focus:border-pink-500 focus:ring-4 focus:ring-pink-500/10 transition-all">
-                    </div>
-                </div>
-
-                <div class="grid gap-1.5">
-                    <label for="billingDescription" class="text-sm font-bold text-slate-700">Description</label>
-                    <input id="billingDescription" type="text" placeholder="e.g. Monthly subscription fee" required value="${escapeHtml(getValue("description"))}" class="w-full min-h-[42px] px-3 py-2 bg-white border border-slate-200 rounded-xl text-slate-900 outline-none focus:border-pink-500 focus:ring-4 focus:ring-pink-500/10 transition-all">
-                </div>
-
-                <div class="grid grid-cols-2 gap-4">
-                    <div class="grid gap-1.5">
-                        <label for="billingInvoiceDate" class="text-sm font-bold text-slate-700">Invoice Date</label>
-                        <input id="billingInvoiceDate" type="date" required value="${invoiceDate}" class="w-full min-h-[42px] px-3 py-2 bg-white border border-slate-200 rounded-xl text-slate-900 outline-none focus:border-pink-500 focus:ring-4 focus:ring-pink-500/10 transition-all">
-                    </div>
-                    <div class="grid gap-1.5">
-                        <label for="billingDueDate" class="text-sm font-bold text-slate-700">Due Date</label>
-                        <input id="billingDueDate" type="date" required value="${dueDate}" class="w-full min-h-[42px] px-3 py-2 bg-white border border-slate-200 rounded-xl text-slate-900 outline-none focus:border-pink-500 focus:ring-4 focus:ring-pink-500/10 transition-all">
-                    </div>
-                </div>
-
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div class="grid gap-1.5">
-                        <label for="billingBuyerState" class="text-sm font-bold text-slate-700">Buyer State</label>
-                        <input id="billingBuyerState" type="text" value="${escapeHtml(getValue("buyerState", "Maharashtra"))}" class="w-full min-h-[42px] px-3 py-2 bg-white border border-slate-200 rounded-xl text-slate-900 outline-none focus:border-pink-500 focus:ring-4 focus:ring-pink-500/10 transition-all">
-                    </div>
-                    <div class="grid gap-1.5">
-                        <label for="billingBuyerStateCode" class="text-sm font-bold text-slate-700">Buyer State Code</label>
-                        <input id="billingBuyerStateCode" type="text" value="${escapeHtml(getValue("buyerStateCode", "27"))}" class="w-full min-h-[42px] px-3 py-2 bg-white border border-slate-200 rounded-xl text-slate-900 outline-none focus:border-pink-500 focus:ring-4 focus:ring-pink-500/10 transition-all">
-                    </div>
-                </div>
-
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div class="grid gap-1.5">
-                        <label for="billingShipTo" class="text-sm font-bold text-slate-700">Ship To / Delivery Location</label>
-                        <input id="billingShipTo" type="text" value="${escapeHtml(getValue("shipTo"))}" class="w-full min-h-[42px] px-3 py-2 bg-white border border-slate-200 rounded-xl text-slate-900 outline-none focus:border-pink-500 focus:ring-4 focus:ring-pink-500/10 transition-all">
-                    </div>
-                    <div class="grid gap-1.5">
-                        <label for="billingShippingState" class="text-sm font-bold text-slate-700">Shipping State</label>
-                        <input id="billingShippingState" type="text" value="${escapeHtml(getValue("shippingState", "Maharashtra"))}" class="w-full min-h-[42px] px-3 py-2 bg-white border border-slate-200 rounded-xl text-slate-900 outline-none focus:border-pink-500 focus:ring-4 focus:ring-pink-500/10 transition-all">
-                    </div>
-                </div>
-
-                <div class="grid gap-1.5">
-                    <label for="billingStatus" class="text-sm font-bold text-slate-700">Status</label>
-                    <select id="billingStatus" required class="w-full min-h-[42px] px-3 py-2 bg-white border border-slate-200 rounded-xl text-slate-900 outline-none focus:border-pink-500 focus:ring-4 focus:ring-pink-500/10 transition-all">
-                        <option value="pending" ${getValue("status", "pending") === "pending" ? "selected" : ""}>Pending</option>
-                        <option value="paid" ${getValue("status") === "paid" ? "selected" : ""}>Paid</option>
-                        <option value="overdue" ${getValue("status") === "overdue" ? "selected" : ""}>Overdue</option>
-                        <option value="cancelled" ${getValue("status") === "cancelled" ? "selected" : ""}>Cancelled</option>
-                    </select>
-                </div>
-            </div>
-        `,
-        onSubmit: async (_e, _form, close) => {
-            const qty = Number(document.getElementById("billingQty").value || 0);
-            const unitRate = Number(document.getElementById("billingUnitRate").value || 0);
-            const discount = Number(document.getElementById("billingDiscount").value || 0);
-            const gstRate = Number(document.getElementById("billingGstRate").value || 18);
-            const taxableValue = Number(document.getElementById("billingAmount").value || 0) || qty * unitRate * (1 - discount / 100);
-
-            const payload = {
-                companyId: document.getElementById("billingCompanyId").value,
-                type: document.getElementById("billingType").value,
-                buyerName: document.getElementById("billingBuyerName").value.trim(),
-                buyerGSTIN: document.getElementById("billingBuyerGSTIN").value.trim() || "URP",
-                buyerAddress: document.getElementById("billingBuyerAddress").value.trim(),
-                placeOfSupply: document.getElementById("billingPlaceOfSupply").value.trim(),
-                reverseCharge: document.getElementById("billingReverseCharge").value,
-                hsnSac: document.getElementById("billingHSNSAC").value.trim(),
-                uom: document.getElementById("billingUOM").value.trim(),
-                qty,
-                unitRate,
-                discount,
-                gstRate,
-                buyerState: document.getElementById("billingBuyerState").value.trim(),
-                buyerStateCode: document.getElementById("billingBuyerStateCode").value.trim(),
-                shipTo: document.getElementById("billingShipTo").value.trim(),
-                shippingState: document.getElementById("billingShippingState").value.trim(),
-                amount: taxableValue,
-                description: document.getElementById("billingDescription").value.trim(),
-                invoiceDate: document.getElementById("billingInvoiceDate").value,
-                dueDate: document.getElementById("billingDueDate").value,
-                status: document.getElementById("billingStatus").value
-            };
-
-            if (isEdit) {
-                await updateBillingRecord(record.id, payload);
-                toast("Billing record updated.");
-            } else {
-                await createBillingRecord(payload);
-                toast("Billing record created.");
-            }
-
-            await loadData();
-            renderShell();
-            close();
-        }
-    });
-}
-
-function numberToWords(num) {
-    const a = ["", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten", "Eleven", "Twelve", "Thirteen", "Fourteen", "Fifteen", "Sixteen", "Seventeen", "Eighteen", "Nineteen"];
-    const b = ["", "", "Twenty", "Thirty", "Forty", "Fifty", "Sixty", "Seventy", "Eighty", "Ninety"];
-    if (num < 20) return a[num];
-    if (num < 100) return b[Math.floor(num / 10)] + (num % 10 ? " " + a[num % 10] : "");
-    if (num < 1000) return a[Math.floor(num / 100)] + " Hundred" + (num % 100 ? " " + numberToWords(num % 100) : "");
-    if (num < 100000) return numberToWords(Math.floor(num / 1000)) + " Thousand" + (num % 1000 ? " " + numberToWords(num % 1000) : "");
-    if (num < 10000000) return numberToWords(Math.floor(num / 100000)) + " Lakh" + (num % 100000 ? " " + numberToWords(num % 100000) : "");
-    return numberToWords(Math.floor(num / 10000000)) + " Crore" + (num % 10000000 ? " " + numberToWords(num % 10000000) : "");
-}
-
-function toIndianCurrencyWords(amount) {
-    const rounded = Math.round(amount);
-    if (rounded === 0) return "Zero Rupees";
-    return numberToWords(rounded) + " Rupees";
-}
-
-function showBillingRecordView(record) {
-    openModal({
-        title: `Billing Record: ${record.id}`,
-        isForm: false,
-        cancelLabel: "Close",
-        content: `
-            <div class="grid gap-4">
-                <div class="grid gap-1.5">
-                    <div class="text-xs font-bold uppercase tracking-wider text-slate-500">Company</div>
-                    <div class="text-sm font-black text-slate-800">${escapeHtml(companyName(record.companyId))}</div>
-                </div>
-                <div class="grid grid-cols-2 gap-4">
-                    <div class="grid gap-1.5">
-                        <div class="text-xs font-bold uppercase tracking-wider text-slate-500">Type</div>
-                        <div>${badge(record.type || "invoice", record.type === "payment" ? "success" : "info")}</div>
-                    </div>
-                    <div class="grid gap-1.5">
-                        <div class="text-xs font-bold uppercase tracking-wider text-slate-500">Amount</div>
-                        <div class="text-sm font-black text-slate-800">${inr.format(record.amount || 0)}</div>
-                    </div>
-                </div>
-                <div class="grid gap-1.5">
-                    <div class="text-xs font-bold uppercase tracking-wider text-slate-500">Status</div>
-                    <div>${badge(record.status || "pending", statusTone(record.status))}</div>
-                </div>
-                <div class="grid grid-cols-2 gap-4">
-                    <div class="grid gap-1.5">
-                        <div class="text-xs font-bold uppercase tracking-wider text-slate-500">Invoice Date</div>
-                        <div>${formatDate(record.invoiceDate)}</div>
-                    </div>
-                    <div class="grid gap-1.5">
-                        <div class="text-xs font-bold uppercase tracking-wider text-slate-500">Due Date</div>
-                        <div>${formatDate(record.dueDate)}</div>
-                    </div>
-                </div>
-                <div class="grid gap-1.5">
-                    <div class="text-xs font-bold uppercase tracking-wider text-slate-500">Description</div>
-                    <div class="text-sm text-slate-700">${escapeHtml(record.description || "No description")}</div>
-                </div>
-            </div>
-        `
-    });
-}
-
-function downloadBillingInvoiceAsPdf(record) {
-    const formatCurrency = (value) => new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", minimumFractionDigits: 2 }).format(value);
-    const companyLabel = escapeHtml(companyName(record.companyId));
-    const invoiceDate = formatDate(record.invoiceDate);
-    const dueDate = formatDate(record.dueDate);
-    const statusLabel = escapeHtml(record.status || "pending");
-    const typeLabel = escapeHtml(record.type || "invoice");
-    const description = escapeHtml(record.description || "Billing services");
-    const qty = Number(record.qty || 1);
-    const unitRate = Number(record.unitRate || record.amount || 0);
-    const discount = Number(record.discount || 0);
-    const gstRate = Number(record.gstRate || 18);
-    const taxableValue = Number(record.amount || qty * unitRate * (1 - discount / 100));
-    const cgstRate = gstRate / 2;
-    const sgstRate = gstRate / 2;
-    const cgstAmount = Number((taxableValue * cgstRate) / 100);
-    const sgstAmount = Number((taxableValue * sgstRate) / 100);
-    const totalTax = cgstAmount + sgstAmount;
-    const totalInvoice = taxableValue + totalTax;
-    const roundedTotal = Math.round(totalInvoice);
-    const roundOff = Number((roundedTotal - totalInvoice).toFixed(2));
-    const totalWords = toIndianCurrencyWords(roundedTotal);
-
-    const supplierName = "Work Cosmo Technologies Pvt. Ltd.";
-    const supplierAddress = "123 Corporate Park, Andheri East, Mumbai, Maharashtra - 400069";
-    const supplierContact = "Phone: +91 22 1234 5678 | Email: billing@workcosmo.in";
-    const supplierGSTIN = "27AAACW1234A1Z9";
-    const supplierState = "Maharashtra";
-    const supplierStateCode = "27";
-    const supplierPAN = "AAACW1234A";
-
-    const invoiceHtml = `<!doctype html>
-    <html lang="en">
-    <head>
-        <meta charset="UTF-8" />
-        <title>TAX INVOICE ${record.id}</title>
-        <style>
-            @page { size: A4 portrait; margin: 12mm; }
-            body { margin: 0; padding: 0; background: #f8fafc; font-family: Inter, Arial, sans-serif; color: #1f2937; }
-            .page { width: 210mm; min-height: 297mm; margin: auto; padding: 12mm; box-sizing: border-box; }
-            .wrapper { border: 1px solid #d1d5db; border-radius: 16px; overflow: hidden; background: #ffffff; }
-            .header { display: flex; justify-content: space-between; align-items: flex-start; gap: 24px; background: #111827; color: #ffffff; padding: 24px 28px; }
-            .header-left h1 { margin: 0 0 12px; font-size: 28px; letter-spacing: 0.12em; text-transform: uppercase; }
-            .header-left p { margin: 4px 0; line-height: 1.6; color: #d1d5db; }
-            .header-right { text-align: right; }
-            .header-right .title { font-size: 22px; font-weight: 800; margin-bottom: 10px; letter-spacing: 0.08em; }
-            .header-right .meta { background: #1f2937; padding: 16px 18px; border-radius: 14px; }
-            .header-right .meta div { margin-bottom: 8px; font-size: 0.88rem; color: #d1d5db; }
-            .section { padding: 24px 28px; }
-            .section-title { font-size: 13px; font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase; margin-bottom: 18px; color: #111827; }
-            .grid-2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
-            .card { background: #f8fafc; border: 1px solid #e5e7eb; border-radius: 16px; padding: 18px; }
-            .card strong { display: block; margin-bottom: 10px; font-size: 0.95rem; color: #111827; }
-            .card p { margin: 0; font-size: 0.88rem; line-height: 1.7; color: #475569; }
-            .invoice-table { width: 100%; border-collapse: collapse; font-size: 0.84rem; }
-            .invoice-table th, .invoice-table td { padding: 14px 12px; border: 1px solid #e5e7eb; }
-            .invoice-table th { background: #e2e8f0; color: #111827; text-align: left; font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.06em; }
-            .invoice-table tbody tr:nth-child(odd) { background: #f8fafc; }
-            .text-right { text-align: right; }
-            .summary-table { width: 100%; border-collapse: collapse; margin-top: 12px; }
-            .summary-table td { padding: 10px 12px; border: 1px solid #e5e7eb; }
-            .summary-table td.label { color: #475569; }
-            .summary-table td.value { text-align: right; font-weight: 700; }
-            .total-value { font-size: 1.05rem; font-weight: 800; }
-            .footer-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin-top: 18px; }
-            .footer-card { background: #f8fafc; border: 1px solid #e5e7eb; border-radius: 16px; padding: 16px; font-size: 0.86rem; color: #475569; }
-            .footer-card strong { display: block; margin-bottom: 10px; color: #111827; }
-            .signature { min-height: 88px; border-top: 1px solid #cbd5e1; margin-top: 24px; padding-top: 12px; color: #475569; }
-        </style>
-    </head>
-    <body>
-        <div class="page">
-            <div class="wrapper">
-                <div class="header">
-                    <div class="header-left">
-                        <h1>Tax Invoice</h1>
-                        <p><strong>${supplierName}</strong></p>
-                        <p>${supplierAddress}</p>
-                        <p>${supplierContact}</p>
-                        <p>GSTIN: ${supplierGSTIN}</p>
-                        <p>State: ${supplierState} - ${supplierStateCode}</p>
-                        <p>PAN: ${supplierPAN}</p>
-                    </div>
-                    <div class="header-right">
-                        <div class="title">TAX INVOICE</div>
-                        <div class="meta">
-                            <div>Invoice No: ${escapeHtml(record.id)}</div>
-                            <div>Date: ${invoiceDate}</div>
-                            <div>Due Date: ${dueDate}</div>
-                            <div>Reverse Charge: ${escapeHtml(record.reverseCharge || "No")}</div>
-                        </div>
-                    </div>
-                </div>
-                <div class="section">
-                    <div class="section-title">Billing & Shipping Details</div>
-                    <div class="grid-2">
-                        <div class="card">
-                            <strong>Bill To</strong>
-                            <p>${escapeHtml(record.buyerName || companyLabel)}</p>
-                            <p>${escapeHtml(record.buyerAddress || "-")}</p>
-                            <p>GSTIN: ${escapeHtml(record.buyerGSTIN || "URP")}</p>
-                            <p>State: ${escapeHtml(record.buyerState || "Maharashtra")} - ${escapeHtml(record.buyerStateCode || "27")}</p>
-                        </div>
-                        <div class="card">
-                            <strong>Ship To</strong>
-                            <p>${escapeHtml(record.shipTo || record.buyerName || companyLabel)}</p>
-                            <p>${escapeHtml(record.shippingState || record.buyerState || "Maharashtra")}</p>
-                            <p>State Code: ${escapeHtml(record.buyerStateCode || "27")}</p>
-                        </div>
-                    </div>
-                </div>
-                <div class="section">
-                    <div class="section-title">Itemized Details</div>
-                    <table class="invoice-table">
-                        <thead>
-                            <tr>
-                                <th style="width:5%;">S.No.</th>
-                                <th style="width:36%;">Description</th>
-                                <th style="width:10%;">HSN / SAC</th>
-                                <th style="width:8%;">UOM</th>
-                                <th style="width:8%;" class="text-right">Qty</th>
-                                <th style="width:12%;" class="text-right">Rate</th>
-                                <th style="width:10%;" class="text-right">Discount</th>
-                                <th style="width:11%;" class="text-right">Taxable</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <tr>
-                                <td>1</td>
-                                <td>${description}</td>
-                                <td>${escapeHtml(record.hsnSac || "998313")}</td>
-                                <td>${escapeHtml(record.uom || "Nos")}</td>
-                                <td class="text-right">${qty}</td>
-                                <td class="text-right">${formatCurrency(unitRate)}</td>
-                                <td class="text-right">${discount}%</td>
-                                <td class="text-right">${formatCurrency(taxableValue)}</td>
-                            </tr>
-                        </tbody>
-                    </table>
-                </div>
-                <div class="section" style="display:grid; grid-template-columns: 1fr 1fr; gap:16px;">
-                    <div class="card">
-                        <strong>Tax Split-up Matrix</strong>
-                        <table class="invoice-table">
-                            <thead>
-                                <tr>
-                                    <th>HSN</th>
-                                    <th>Taxable</th>
-                                    <th>CGST %</th>
-                                    <th>CGST Amt</th>
-                                    <th>SGST %</th>
-                                    <th>SGST Amt</th>
-                                    <th>Total Tax</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                <tr>
-                                    <td>${escapeHtml(record.hsnSac || "998313")}</td>
-                                    <td class="text-right">${formatCurrency(taxableValue)}</td>
-                                    <td class="text-right">${cgstRate}%</td>
-                                    <td class="text-right">${formatCurrency(cgstAmount)}</td>
-                                    <td class="text-right">${sgstRate}%</td>
-                                    <td class="text-right">${formatCurrency(sgstAmount)}</td>
-                                    <td class="text-right">${formatCurrency(totalTax)}</td>
-                                </tr>
-                            </tbody>
-                        </table>
-                    </div>
-                    <div class="card">
-                        <strong>Grand Totals</strong>
-                        <table class="summary-table">
-                            <tr><td class="label">Total Taxable Value</td><td class="value">${formatCurrency(taxableValue)}</td></tr>
-                            <tr><td class="label">Central Tax (CGST)</td><td class="value">${formatCurrency(cgstAmount)}</td></tr>
-                            <tr><td class="label">State Tax (SGST)</td><td class="value">${formatCurrency(sgstAmount)}</td></tr>
-                            <tr><td class="label">Integrated Tax (IGST)</td><td class="value">₹0.00</td></tr>
-                            <tr><td class="label">Cess</td><td class="value">₹0.00</td></tr>
-                            <tr><td class="label">Round Off</td><td class="value">${formatCurrency(roundOff)}</td></tr>
-                            <tr><td class="label total-value">Invoice Value</td><td class="value total-value">${formatCurrency(roundedTotal)}</td></tr>
-                        </table>
-                        <p style="margin-top:14px; font-size:0.9rem; color:#475569;"><strong>Amount in Words:</strong><br />${escapeHtml(totalWords)} Only</p>
-                    </div>
-                </div>
-                <div class="section">
-                    <div class="footer-grid">
-                        <div class="footer-card">
-                            <strong>Bank & Payment Details</strong>
-                            Bank Name: State Bank of India<br />
-                            Account Name: Work Cosmo Technologies Pvt. Ltd.<br />
-                            Account Number: 123456789012<br />
-                            IFSC Code: SBIN0001234<br />
-                            Branch: Mumbai Corporate Branch
-                        </div>
-                        <div class="footer-card">
-                            <strong>Terms & Conditions</strong>
-                            1. Goods once sold cannot be taken back or exchanged.<br />
-                            2. Interest @ 18% p.a. will be charged if payment is not received within due date.<br />
-                            3. All disputes are subject to Mumbai jurisdiction.
-                        </div>
-                        <div class="footer-card">
-                            <strong>For Work Cosmo Technologies Pvt. Ltd.</strong>
-                            <div class="signature">Authorized Signatory</div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </body>
-    </html>`;
-
-    const blob = new Blob([invoiceHtml], { type: "text/html" });
-    const url = URL.createObjectURL(blob);
-    const newTab = window.open(url, "_blank");
-    if (!newTab) {
-        toast("Popup blocked. Allow popups to view invoice.", true);
-        URL.revokeObjectURL(url);
-        return;
-    }
-
-    newTab.focus();
-}
+// Billing modal, record view, and invoice export removed
 
 function showRoleModal() {
     openModal({
