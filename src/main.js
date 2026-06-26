@@ -159,54 +159,55 @@ function renderShell() {
     const current = views[state.view];
     app.className = "";
     app.innerHTML = `
-        <div class="grid grid-cols-1 md:grid-cols-[280px_1fr] min-h-screen bg-transparent">
-            <aside class="sticky top-0 h-screen flex flex-col gap-6 p-6 bg-white/60 backdrop-blur-xl border-r border-slate-200 shadow-[4px_0_24px_rgba(0,0,0,0.02)] z-10">
-                <div class="flex items-center gap-3">
-                    <div class="w-10 h-10 bg-gradient-to-br from-blue-500 to-pink-500 rounded-xl flex items-center justify-center text-slate-900 text-lg shadow-md"><i class="fas fa-shield-halved"></i></div>
+        <div class="grid grid-cols-1 md:grid-cols-[320px_1fr] min-h-screen bg-transparent">
+            <aside class="sticky top-0 h-screen flex flex-col gap-6 p-6 bg-gradient-to-br from-slate-50 via-white to-blue-50/30 backdrop-blur-xl border-r border-slate-200 shadow-[4px_0_24px_rgba(0,0,0,0.08)] z-10">
+                <div class="flex items-center gap-3 mb-2">
+                    <div class="w-14 h-14 bg-gradient-to-br from-blue-500 via-purple-500 to-pink-500 rounded-2xl flex items-center justify-center text-white text-2xl shadow-lg shadow-blue-500/30"><i class="fas fa-shield-halved"></i></div>
                     <div>
-                        <span class="block text-[17px] font-black text-slate-900">Work Cosmo</span>
-                        <span class="text-xs text-slate-500 font-medium">Control Center</span>
+                        <span class="block text-xl font-black text-slate-900">Work Cosmo</span>
+                        <span class="text-xs text-slate-500 font-bold tracking-wider">CONTROL CENTER</span>
                     </div>
                 </div>
+                <div class="h-1 bg-gradient-to-r from-blue-200 via-purple-200 to-transparent rounded-full"></div>
                 <nav class="grid gap-2">
                     ${Object.entries(views)
             .map(
                 ([key, view]) => `
-                        <button class="w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold transition-all ${key === state.view ? "text-blue-600 bg-blue-50 shadow-sm shadow-blue-100" : "text-slate-500 hover:text-slate-900 hover:bg-white"}" data-view="${key}">
-                            <i class="fas ${view.icon}"></i>
+                        <button class="w-full flex items-center gap-3 px-4 py-4 rounded-xl font-bold text-lg transition-all ${key === state.view ? "text-blue-600 bg-gradient-to-r from-blue-50 to-indigo-50 shadow-md shadow-blue-100 border-l-4 border-blue-600" : "text-slate-600 hover:text-slate-900 hover:bg-white/70"}" data-view="${key}">
+                            <i class="fas ${view.icon} text-xl"></i>
                             <span>${view.label}</span>
                         </button>
                     `
             )
             .join("")}
                 </nav>
-                    <div class="mt-auto p-4 bg-white rounded-xl border border-slate-200 shadow-sm">
-                    <div class="flex items-center gap-3 mb-3">
-                        <div class="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center text-blue-600">
+                    <div class="mt-auto p-5 bg-gradient-to-br from-blue-50 to-indigo-50 rounded-2xl border-2 border-blue-200 shadow-md">
+                    <div class="flex items-center gap-3 mb-4">
+                        <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white text-lg shadow-md">
                             <i class="fas fa-user-shield"></i>
                         </div>
                         <div class="flex-1 overflow-hidden">
-                            <strong class="block text-sm text-slate-800 truncate">${escapeHtml(state.session.company?.companyName || "Platform Admin")}</strong>
-                            <span class="block text-xs text-slate-500 mt-0.5 truncate">${state.session.adminMode ? "Super Admin" : escapeHtml(state.session.user?.role || "Admin")}</span>
+                            <strong class="block text-sm text-slate-800 truncate font-black">${escapeHtml(state.session.company?.companyName || "Platform Admin")}</strong>
+                            <span class="block text-xs text-slate-500 mt-1 font-bold">${state.session.adminMode ? "🔐 SUPER ADMIN" : escapeHtml(state.session.user?.role || "Admin").toUpperCase()}</span>
                         </div>
                     </div>
-                    <button class="w-full flex items-center justify-center gap-2 px-4 py-2 font-bold rounded-lg text-red-600 bg-red-50 hover:bg-red-100 transition-all" id="logoutButton" type="button">
+                    <button class="w-full flex items-center justify-center gap-2 px-4 py-2.5 font-bold rounded-lg text-red-600 bg-red-50 hover:bg-red-100 transition-all border border-red-200" id="logoutButton" type="button">
                         <i class="fas fa-power-off"></i> Sign Out
                     </button>
                 </div>
             </aside>
             <main class="min-w-0 p-6 md:p-8">
-                <header class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8 bg-white/60 backdrop-blur-md p-6 rounded-2xl border border-slate-200 shadow-sm">
+                <header class="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-8 bg-gradient-to-r from-slate-50 via-blue-50 to-indigo-50 backdrop-blur-md p-8 rounded-3xl border border-slate-200 shadow-lg">
                     <div class="flex flex-col">
-                        <h1 class="text-3xl font-black text-slate-900 mb-1">${current.title}</h1>
-                        <p class="text-sm text-slate-500 font-medium">${current.subtitle}</p>
+                        <h1 class="text-5xl font-black text-slate-900 mb-3">${current.title}</h1>
+                        <p class="text-lg text-slate-600 font-medium">${current.subtitle}</p>
                     </div>
-                    <div class="flex gap-3">
-                        <button class="inline-flex items-center justify-center gap-2 px-4 py-2.5 font-bold rounded-xl bg-white text-slate-700 border border-slate-200 hover:bg-slate-50 hover:border-slate-300 shadow-sm transition-all" id="refreshButton" type="button">
-                            <i class="fas fa-rotate"></i> Sync
+                    <div class="flex gap-3 flex-wrap">
+                        <button class="inline-flex items-center justify-center gap-2 px-6 py-3 font-bold rounded-xl bg-white text-slate-700 border border-slate-200 hover:bg-slate-50 hover:border-slate-300 shadow-md transition-all" id="refreshButton" type="button">
+                            <i class="fas fa-rotate"></i> <span>Sync Data</span>
                         </button>
-                        <button class="inline-flex items-center justify-center gap-2 px-5 py-2.5 font-bold rounded-xl bg-gradient-to-r from-blue-600 to-pink-500 text-slate-900 hover:scale-[1.02] hover:shadow-lg hover:shadow-pink-500/25 transition-all" id="primaryAction" type="button">
-                            <i class="fas fa-plus"></i> ${primaryActionLabel()}
+                        <button class="inline-flex items-center justify-center gap-2 px-6 py-3 font-bold rounded-xl bg-gradient-to-r from-blue-600 to-pink-500 text-white hover:scale-[1.02] hover:shadow-lg hover:shadow-pink-500/25 transition-all" id="primaryAction" type="button">
+                            <i class="fas fa-plus"></i> <span>${primaryActionLabel()}</span>
                         </button>
                     </div>
                 </header>
@@ -292,25 +293,41 @@ function renderView() {
     }
 }
 
-function metric(title, value, icon = "fa-chart-simple", color = "blue") {
+function metric(title, value, icon = "fa-chart-simple", color = "blue", subtitle = "") {
     const palette = {
         blue: "from-blue-500 to-indigo-500",
         emerald: "from-emerald-400 to-emerald-500",
         indigo: "from-indigo-500 to-violet-500",
         rose: "from-rose-500 to-pink-500",
         amber: "from-amber-400 to-orange-500",
+        cyan: "from-cyan-400 to-blue-500",
+        teal: "from-teal-400 to-emerald-500",
+        purple: "from-purple-500 to-pink-500",
         soft: "from-slate-400 to-slate-500"
     };
+    const bgPalette = {
+        blue: "bg-blue-50",
+        emerald: "bg-emerald-50",
+        indigo: "bg-indigo-50",
+        rose: "bg-rose-50",
+        amber: "bg-amber-50",
+        cyan: "bg-cyan-50",
+        teal: "bg-teal-50",
+        purple: "bg-purple-50",
+        soft: "bg-slate-50"
+    };
     const grad = palette[color] || palette.blue;
+    const bg = bgPalette[color] || bgPalette.blue;
     return `
-        <div class="p-4 rounded-2xl bg-white/70 border border-slate-100 shadow-sm">
-            <div class="flex items-center gap-4">
-                <div class="w-12 h-12 rounded-lg bg-gradient-to-br ${grad} flex items-center justify-center text-white text-lg">
+        <div class="p-6 rounded-2xl ${bg} border border-slate-100 shadow-md hover:shadow-lg transition-shadow">
+            <div class="flex items-start gap-4">
+                <div class="w-16 h-16 rounded-xl bg-gradient-to-br ${grad} flex items-center justify-center text-white text-2xl shadow-lg">
                     <i class="fas ${icon}"></i>
                 </div>
-                <div>
+                <div class="flex-1">
                     <div class="text-xs font-black uppercase tracking-wider text-slate-500">${escapeHtml(title)}</div>
-                    <div class="text-2xl font-extrabold text-slate-900 mt-1">${escapeHtml(String(value))}</div>
+                    <div class="text-4xl font-black text-slate-900 mt-2">${escapeHtml(String(value))}</div>
+                    ${subtitle ? `<div class="text-sm text-slate-600 mt-1 font-medium">${escapeHtml(subtitle)}</div>` : ""}
                 </div>
             </div>
         </div>
@@ -322,37 +339,88 @@ function renderOverview() {
     const totalUsers = state.users.length;
     const totalLeads = state.contactMessages.length;
     const totalEmails = state.emails.length;
+    const activeUsers = state.users.filter(u => u.status === "active").length;
+    const blockedCompanies = state.companies.filter(c => c.status === "blocked").length;
+    const avgUsersPerCompany = totalCompanies > 0 ? Math.round(totalUsers / totalCompanies) : 0;
 
     return `
         <div class="grid gap-8">
-            <section class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                ${metric("Companies", totalCompanies, "fa-building", "emerald")}
-                ${metric("Total Users", totalUsers, "fa-users", "blue")}
-                ${metric("Leads", totalLeads, "fa-address-book", "indigo")}
-                ${metric("Emails", totalEmails, "fa-envelope", "rose")}
+            <!-- Main Metrics -->\n            <section class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                ${metric("Active Companies", totalCompanies, "fa-building-shield", "emerald", "Managed workspaces")}
+                ${metric("Total Users", totalUsers, "fa-users", "blue", `${activeUsers} active`)}
+                ${metric("Website Leads", totalLeads, "fa-address-book", "indigo", "Recent submissions")}
+                ${metric("Email Configs", totalEmails, "fa-envelope-open", "rose", "Managed mailboxes")}
             </section>
 
-            <div class="grid grid-cols-1 lg:grid-cols-[2fr_1fr] gap-8">
-                <div class="bg-white/70 backdrop-blur-xl border border-slate-200 rounded-3xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] overflow-hidden">
-                    <div class="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
-                        <div>
-                            <h3 class="text-lg font-black text-slate-800">Billing Disabled</h3>
-                            <p class="text-xs text-slate-500 font-medium">Billing features have been removed from this panel.</p>
-                        </div>
+            <!-- Secondary Metrics -->\n            <section class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                ${metric("Avg Users/Company", avgUsersPerCompany, "fa-chart-line", "cyan")}
+                ${metric("Suspended Companies", blockedCompanies, "fa-ban", "amber")}
+                ${metric("Role Profiles", Object.keys(ROLE_DEFINITIONS).length, "fa-user-lock", "purple")}
+            </section>
+
+            <!-- Configuration & System Status -->\n            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <!-- System Configuration Card -->\n                <div class="lg:col-span-2 bg-gradient-to-br from-slate-50 to-blue-50/30 backdrop-blur-xl border border-slate-200 rounded-3xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] overflow-hidden">
+                    <div class="p-6 border-b border-slate-200 bg-gradient-to-r from-slate-50 to-blue-50">
+                        <h3 class="text-xl font-black text-slate-800 flex items-center gap-2"><i class="fas fa-cogs text-blue-600"></i> System Configuration</h3>
+                        <p class="text-sm text-slate-600 font-medium mt-1">Core platform settings and features</p>
                     </div>
-                    <div class="p-6">
-                        ${empty("Billing section removed.")}
+                    <div class="p-6 grid gap-4">
+                        <div class="p-4 rounded-xl bg-white border border-slate-100 hover:border-blue-200 transition-all">
+                            <div class="flex justify-between items-start mb-2">
+                                <div class="font-bold text-slate-800">Module System</div>
+                                <span class="px-2 py-1 bg-green-100 text-green-700 text-xs font-bold rounded-lg">ACTIVE</span>
+                            </div>
+                            <p class="text-sm text-slate-600">4 core modules enabled: Hire, Core, Perform, AI</p>
+                        </div>
+                        <div class="p-4 rounded-xl bg-white border border-slate-100 hover:border-emerald-200 transition-all">
+                            <div class="flex justify-between items-start mb-2">
+                                <div class="font-bold text-slate-800">RBAC Engine</div>
+                                <span class="px-2 py-1 bg-green-100 text-green-700 text-xs font-bold rounded-lg">ACTIVE</span>
+                            </div>
+                            <p class="text-sm text-slate-600">${Object.keys(ROLE_DEFINITIONS).length} role profiles, permission-based access control</p>
+                        </div>
+                        <div class="p-4 rounded-xl bg-white border border-slate-100 hover:border-purple-200 transition-all">
+                            <div class="flex justify-between items-start mb-2">
+                                <div class="font-bold text-slate-800">SSO & Auth</div>
+                                <span class="px-2 py-1 bg-green-100 text-green-700 text-xs font-bold rounded-lg">ACTIVE</span>
+                            </div>
+                            <p class="text-sm text-slate-600">Firebase Auth with custom provisioning flows</p>
+                        </div>
                     </div>
                 </div>
-                <div class="grid gap-8 items-start">
-                    <div class="bg-white/70 backdrop-blur-xl border border-slate-200 rounded-3xl shadow-[0_8px_30px_rgb(0,0,0,0.04)]">
-                        <div class="p-6 border-b border-slate-100 bg-slate-50/50">
-                            <h3 class="text-lg font-black text-slate-800">Workspace Usage</h3>
-                            <p class="text-xs text-slate-500 font-medium">Current client consumption</p>
-                        </div>
-                        <div class="p-6">
-                            ${companyUsageList()}
-                        </div>
+
+                <!-- Workspace Usage Card -->\n                <div class="bg-gradient-to-br from-emerald-50 to-teal-50/30 backdrop-blur-xl border border-slate-200 rounded-3xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] overflow-hidden">
+                    <div class="p-6 border-b border-slate-200 bg-gradient-to-r from-emerald-50 to-teal-50">
+                        <h3 class="text-lg font-black text-slate-800 flex items-center gap-2"><i class="fas fa-chart-pie text-emerald-600"></i> Usage</h3>
+                        <p class="text-sm text-slate-600 font-medium mt-1">Top workspaces</p>
+                    </div>
+                    <div class="p-6">
+                        ${companyUsageList()}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Feature Matrix -->\n            <div class="bg-gradient-to-br from-purple-50 to-pink-50/30 backdrop-blur-xl border border-slate-200 rounded-3xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] overflow-hidden">
+                <div class="p-6 border-b border-slate-200 bg-gradient-to-r from-purple-50 to-pink-50">
+                    <h3 class="text-xl font-black text-slate-800 flex items-center gap-2"><i class="fas fa-star text-purple-600"></i> Available Features</h3>
+                    <p class="text-sm text-slate-600 font-medium mt-1">Platform capabilities and modules</p>
+                </div>
+                <div class="p-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                    <div class="p-4 rounded-xl border-2 border-blue-200 bg-blue-50 hover:bg-blue-100 transition-all">
+                        <div class="font-bold text-blue-900 mb-1 flex items-center gap-2"><i class="fas fa-users-rays"></i> Hire Module</div>
+                        <p class="text-sm text-blue-700">Recruitment & hiring workflows</p>
+                    </div>
+                    <div class="p-4 rounded-xl border-2 border-purple-200 bg-purple-50 hover:bg-purple-100 transition-all">
+                        <div class="font-bold text-purple-900 mb-1 flex items-center gap-2"><i class="fas fa-id-card-clip"></i> Core Module</div>
+                        <p class="text-sm text-purple-700">Employee & HR operations</p>
+                    </div>
+                    <div class="p-4 rounded-xl border-2 border-emerald-200 bg-emerald-50 hover:bg-emerald-100 transition-all">
+                        <div class="font-bold text-emerald-900 mb-1 flex items-center gap-2"><i class="fas fa-chart-line"></i> Perform Module</div>
+                        <p class="text-sm text-emerald-700">Performance reviews & goals</p>
+                    </div>
+                    <div class="p-4 rounded-xl border-2 border-orange-200 bg-orange-50 hover:bg-orange-100 transition-all">
+                        <div class="font-bold text-orange-900 mb-1 flex items-center gap-2"><i class="fas fa-brain"></i> AI Module</div>
+                        <p class="text-sm text-orange-700">AI insights & automation</p>
                     </div>
                 </div>
             </div>
@@ -1726,7 +1794,7 @@ function recordActionButton(action, collectionName, id, icon, title, danger = fa
 
 function companyUsageList() {
     if (!state.companies.length) return empty("No usage data yet.");
-    return `<div class="grid gap-4">${state.companies
+    return `<div class="grid gap-5">${state.companies
         .map((company) => {
             const used = userCount(company.id);
             const limit = Number(company.userLimit || 1);
@@ -1736,15 +1804,23 @@ function companyUsageList() {
                     ? "from-rose-500 to-pink-500"
                     : p > 70
                         ? "from-amber-400 to-orange-500"
-                        : "from-blue-500 to-indigo-500";
+                        : "from-emerald-500 to-teal-500";
+            const statusColor = company.status === "active" ? "text-emerald-600 bg-emerald-50" : "text-slate-600 bg-slate-100";
             return `
-            <div class="p-4 rounded-2xl bg-white border border-slate-100 hover:shadow-md hover:border-slate-200 transition-all">
-                <div class="flex justify-between items-center mb-3">
-                    <strong class="text-sm font-black text-slate-800">${escapeHtml(company.companyName)}</strong>
-                    <span class="text-xs font-bold text-slate-500 bg-slate-100 px-2 py-1 rounded-md">${used}/${limit} users</span>
+            <div class="p-5 rounded-2xl bg-gradient-to-br from-white to-slate-50 border-2 border-slate-100 hover:shadow-lg hover:border-slate-300 transition-all">
+                <div class="flex justify-between items-center mb-4">
+                    <div class="flex-1">
+                        <strong class="text-base font-black text-slate-900">${escapeHtml(company.companyName)}</strong>
+                        <p class="text-xs text-slate-500 font-medium mt-1">${escapeHtml(company.id)}</p>
+                    </div>
+                    <span class="text-xs font-bold px-3 py-1.5 rounded-lg ${statusColor}\">${company.status === "active" ? "✓ Active" : "⊘ Blocked"}</span>
                 </div>
-                <div class="h-2 w-full bg-slate-100 rounded-full overflow-hidden">
-                    <div class="h-full bg-gradient-to-r ${colorClass} transition-all duration-500" style="width: ${p}%"></div>
+                <div class="flex justify-between items-center mb-3">
+                    <span class="text-sm font-bold text-slate-700\">${used}/${limit} Users</span>
+                    <span class="text-xs font-bold text-slate-500\">${p}%</span>
+                </div>
+                <div class="h-3 w-full bg-slate-200 rounded-full overflow-hidden shadow-inner">
+                    <div class="h-full bg-gradient-to-r ${colorClass} transition-all duration-500 rounded-full shadow-md\" style="width: ${p}%\"></div>
                 </div>
             </div>
         `;
