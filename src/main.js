@@ -1,11 +1,17 @@
 import { PERMISSIONS, ROLE_DEFINITIONS, getAllRoles } from "./config/rbac.js";
 import {
+    COMPANY_MODULES,
+    companyAiCreditsRemaining,
+    isAiModuleEnabled,
+    normalizeModulesEnabled
+} from "./config/modules.js";
+import {
     canAccessModule,
     canAddUser,
     hasPermission
 } from "./services/accessControlService.js";
 import { watchAuth, login, logout, loadAccessSession } from "./services/authService.js";
-import { createCompanyWorkspace, getCompanyUsers, inviteUser, assignRole } from "./services/companyService.js";
+import { createCompanyWorkspace, getCompanyUsers, inviteUser, assignRole, updateCompanyWorkspace } from "./services/companyService.js";
 import {
     createRecord,
     listCollection,
@@ -1498,6 +1504,10 @@ async function handleRecordAction(button) {
             showEmailModal(record);
             return;
         }
+        if (collectionName === "companies") {
+            showEditCompanyModal(record);
+            return;
+        }
 
         const editableRecord = { ...record };
         delete editableRecord.id;
@@ -1617,6 +1627,7 @@ function companyTable(companies) {
                         <th class="px-6 py-4">Company</th>
                         <th class="px-6 py-4">Pricing & Cycle</th>
                         <th class="px-6 py-4">Status</th>
+                        <th class="px-6 py-4">Modules</th>
                         <th class="px-6 py-4">Users</th>
                         <th class="px-6 py-4">AI Credits</th>
                         <th class="px-6 py-4">Job Credits</th>
@@ -1628,6 +1639,8 @@ function companyTable(companies) {
             .map((company) => {
                 const used = userCount(company.id);
                 const limit = Number(company.userLimit || 1);
+                const aiEnabled = isAiModuleEnabled(company);
+                const aiRemaining = companyAiCreditsRemaining(company);
                 return `
                             <tr class="hover:bg-slate-50 transition-colors">
                                 <td class="px-6 py-4">
@@ -1640,6 +1653,11 @@ function companyTable(companies) {
                                 </td>
                                 <td class="px-6 py-4">${badge(company.status || "active", statusTone(company.status))}</td>
                                 <td class="px-6 py-4">
+                                    <div class="flex flex-wrap gap-1">
+                                        ${companyModuleBadges(company)}
+                                    </div>
+                                </td>
+                                <td class="px-6 py-4">
                                     <div class="flex justify-between text-[10px] font-bold mb-1">
                                         <span>${used} / ${limit}</span>
                                         <span>${percent(used, limit)}%</span>
@@ -1649,13 +1667,17 @@ function companyTable(companies) {
                                     </div>
                                 </td>
                                 <td class="px-6 py-4">
+                                    ${aiEnabled
+                        ? `
                                     <div class="flex items-center gap-2">
-                                        <span class="text-sm font-black text-slate-700">${Number(company.aiCredits || 0).toLocaleString("en-IN")}</span>
+                                        <span class="text-sm font-black text-slate-700">${aiRemaining.toLocaleString("en-IN")}</span>
                                         <div class="flex gap-1">
                                             <button class="w-7 h-7 rounded-lg bg-indigo-50 text-indigo-600 hover:bg-indigo-100 flex items-center justify-center transition-colors" data-adjust-credits="${company.id}" title="Adjust AI Credits"><i class="fas fa-coins text-[10px]"></i></button>
                                             <button class="w-7 h-7 rounded-lg bg-slate-50 text-slate-600 hover:bg-slate-100 flex items-center justify-center transition-colors" data-view-credit-logs="${company.id}" title="View Credit History"><i class="fas fa-clock-rotate-left text-[10px]"></i></button>
                                         </div>
                                     </div>
+                                    `
+                        : `<span class="text-xs font-bold text-slate-400">AI module off</span>`}
                                 </td>
                                 <td class="px-6 py-4 text-xs font-black text-slate-700">
                                     ${Number(company.jobPostingCredits || 0).toLocaleString("en-IN")}
@@ -1898,6 +1920,77 @@ window.WorkCosmoAccess = {
     getCompanyUsers
 };
 
+const MODULE_BADGE_TONES = {
+    blue: "bg-blue-500/10 text-blue-600 border-blue-500/20",
+    purple: "bg-purple-500/10 text-purple-600 border-purple-500/20",
+    emerald: "bg-emerald-500/10 text-emerald-600 border-emerald-500/20",
+    orange: "bg-orange-500/10 text-orange-600 border-orange-500/20"
+};
+
+function companyModuleBadges(company) {
+    const modulesEnabled = normalizeModulesEnabled(company.modulesEnabled || {});
+    return COMPANY_MODULES.map((mod) => {
+        const enabled = modulesEnabled[mod.key];
+        const tone = MODULE_BADGE_TONES[mod.tone] || MODULE_BADGE_TONES.blue;
+        return `<span class="inline-flex items-center gap-1 px-2 py-1 rounded-lg border text-[10px] font-black uppercase tracking-wide ${enabled ? tone : "bg-slate-100 text-slate-400 border-slate-200"}">
+            <i class="fas ${mod.icon}"></i>${mod.label}
+        </span>`;
+    }).join("");
+}
+
+function renderCompanyModuleToggles(modulesEnabled = {}) {
+    const enabled = normalizeModulesEnabled(modulesEnabled);
+    return `
+        <div class="grid gap-3 mt-2">
+            <div>
+                <label class="text-sm font-bold text-slate-700">Enabled Modules</label>
+                <p class="text-xs text-slate-500 mt-1">Toggle which Workcosmo products this workspace can launch from Space.</p>
+            </div>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                ${COMPANY_MODULES.map((mod) => `
+                    <label class="flex items-start gap-3 p-3 rounded-2xl border border-slate-200 bg-slate-50/70 hover:bg-white transition-colors cursor-pointer">
+                        <input type="checkbox" class="module-toggle mt-1" data-module-key="${mod.key}" ${enabled[mod.key] ? "checked" : ""} />
+                        <span>
+                            <span class="flex items-center gap-2 text-sm font-bold text-slate-800">
+                                <i class="fas ${mod.icon} text-slate-500"></i>${mod.label}
+                            </span>
+                            <span class="block text-xs text-slate-500 mt-1">${mod.description}</span>
+                        </span>
+                    </label>
+                `).join("")}
+            </div>
+        </div>
+    `;
+}
+
+function readCompanyModuleToggles() {
+    const modulesEnabled = COMPANY_MODULES.reduce((acc, mod) => {
+        const input = document.querySelector(`.module-toggle[data-module-key="${mod.key}"]`);
+        acc[mod.key] = Boolean(input?.checked);
+        return acc;
+    }, {});
+    return normalizeModulesEnabled(modulesEnabled);
+}
+
+function bindAiCreditsSection() {
+    const aiToggle = document.querySelector('.module-toggle[data-module-key="ai"]');
+    const section = document.getElementById("aiCreditsSection");
+    const input = document.getElementById("aiCredits");
+    if (!aiToggle || !section) return;
+
+    const sync = () => {
+        const enabled = aiToggle.checked;
+        section.classList.toggle("hidden", !enabled);
+        if (input) {
+            input.disabled = !enabled;
+            if (!enabled) input.value = "0";
+        }
+    };
+
+    aiToggle.addEventListener("change", sync);
+    sync();
+}
+
 function showCompanyModal() {
     openModal({
         title: "Create Company Workspace",
@@ -1917,27 +2010,29 @@ function showCompanyModal() {
                     <input id="userLimit" type="number" min="1" value="5" required class="w-full min-h-[42px] px-3 py-2 bg-white border border-slate-200 rounded-xl text-slate-900 outline-none focus:border-pink-500 focus:ring-4 focus:ring-pink-500/10 transition-all">
                 </div>
                 <div class="grid gap-1.5">
-                    <label for="aiCredits" class="text-sm font-bold text-slate-700">AI Credits</label>
-                    <input id="aiCredits" type="number" min="0" value="50000" required class="w-full min-h-[42px] px-3 py-2 bg-white border border-slate-200 rounded-xl text-slate-900 outline-none focus:border-pink-500 focus:ring-4 focus:ring-pink-500/10 transition-all">
-                </div>
-            </div>
-            <div class="grid gap-4 grid-cols-2 mt-2">
-                <div class="grid gap-1.5">
                     <label for="jobPostingCredits" class="text-sm font-bold text-slate-700">Job Posting Credits</label>
                     <input id="jobPostingCredits" type="number" min="0" value="10" required class="w-full min-h-[42px] px-3 py-2 bg-white border border-slate-200 rounded-xl text-slate-900 outline-none focus:border-pink-500 focus:ring-4 focus:ring-pink-500/10 transition-all">
                 </div>
+            </div>
+            ${renderCompanyModuleToggles()}
+            <div id="aiCreditsSection" class="grid gap-1.5 mt-2">
+                <label for="aiCredits" class="text-sm font-bold text-slate-700">AI Module Credits</label>
+                <input id="aiCredits" type="number" min="0" value="50000" required class="w-full min-h-[42px] px-3 py-2 bg-white border border-slate-200 rounded-xl text-slate-900 outline-none focus:border-pink-500 focus:ring-4 focus:ring-pink-500/10 transition-all">
+                <p class="text-xs text-slate-500">Initial credit balance for AI features when the AI module is enabled.</p>
+            </div>
+            <div class="grid gap-4 grid-cols-2 mt-2">
                 <div class="grid gap-1.5">
                     <label for="pricing" class="text-sm font-bold text-slate-700">Pricing</label>
                     <input id="pricing" placeholder="e.g. ₹2999/mo" required class="w-full min-h-[42px] px-3 py-2 bg-white border border-slate-200 rounded-xl text-slate-900 outline-none focus:border-pink-500 focus:ring-4 focus:ring-pink-500/10 transition-all">
                 </div>
-            </div>
-            <div class="grid gap-1.5 mt-2">
-                <label for="billingCycle" class="text-sm font-bold text-slate-700">Billing Cycle</label>
-                <select id="billingCycle" class="w-full min-h-[42px] px-3 py-2 bg-white border border-slate-200 rounded-xl text-slate-900 outline-none focus:border-pink-500 focus:ring-4 focus:ring-pink-500/10 transition-all">
-                    <option value="monthly">Monthly</option>
-                    <option value="quarterly">Quarterly</option>
-                    <option value="annual">Annual</option>
-                </select>
+                <div class="grid gap-1.5">
+                    <label for="billingCycle" class="text-sm font-bold text-slate-700">Billing Cycle</label>
+                    <select id="billingCycle" class="w-full min-h-[42px] px-3 py-2 bg-white border border-slate-200 rounded-xl text-slate-900 outline-none focus:border-pink-500 focus:ring-4 focus:ring-pink-500/10 transition-all">
+                        <option value="monthly">Monthly</option>
+                        <option value="quarterly">Quarterly</option>
+                        <option value="annual">Annual</option>
+                    </select>
+                </div>
             </div>
             <div class="grid gap-1.5 mt-2">
                 <label for="ownerName" class="text-sm font-bold text-slate-700">Owner Name</label>
@@ -1985,6 +2080,7 @@ function showCompanyModal() {
                 companyId: companySubdomain,
                 companyName: document.getElementById("companyName").value.trim(),
                 userLimit: Number(document.getElementById("userLimit").value || 1),
+                modulesEnabled: readCompanyModuleToggles(),
                 aiCredits: Number(document.getElementById("aiCredits").value || 0),
                 jobPostingCredits: Number(document.getElementById("jobPostingCredits").value || 0),
                 pricing: document.getElementById("pricing").value.trim(),
@@ -2016,6 +2112,104 @@ function showCompanyModal() {
                     cSub.value = getClientId(cName.value);
                 }
             });
+        }
+        bindAiCreditsSection();
+    }, 100);
+}
+
+function showEditCompanyModal(company) {
+    const modulesEnabled = normalizeModulesEnabled(company.modulesEnabled || {});
+    const aiEnabled = modulesEnabled.ai;
+    const aiRemaining = companyAiCreditsRemaining(company);
+
+    openModal({
+        title: `Edit Company — ${company.companyName}`,
+        submitLabel: "Save Changes",
+        content: `
+            <div class="grid gap-1.5">
+                <label for="editCompanyName" class="text-sm font-bold text-slate-700">Company Name</label>
+                <input id="editCompanyName" required value="${escapeHtml(company.companyName || "")}" class="w-full min-h-[42px] px-3 py-2 bg-white border border-slate-200 rounded-xl text-slate-900 outline-none focus:border-pink-500 focus:ring-4 focus:ring-pink-500/10 transition-all">
+            </div>
+            <div class="grid gap-1.5 mt-2">
+                <label class="text-sm font-bold text-slate-700">Client ID</label>
+                <input value="${escapeHtml(company.id)}" disabled class="w-full min-h-[42px] px-3 py-2 bg-slate-100 border border-slate-200 rounded-xl text-slate-500">
+            </div>
+            <div class="grid gap-4 grid-cols-2 mt-2">
+                <div class="grid gap-1.5">
+                    <label for="editUserLimit" class="text-sm font-bold text-slate-700">User Limit</label>
+                    <input id="editUserLimit" type="number" min="1" value="${Number(company.userLimit || 1)}" required class="w-full min-h-[42px] px-3 py-2 bg-white border border-slate-200 rounded-xl text-slate-900 outline-none focus:border-pink-500 focus:ring-4 focus:ring-pink-500/10 transition-all">
+                </div>
+                <div class="grid gap-1.5">
+                    <label for="editJobPostingCredits" class="text-sm font-bold text-slate-700">Job Posting Credits</label>
+                    <input id="editJobPostingCredits" type="number" min="0" value="${Number(company.jobPostingCredits || 0)}" required class="w-full min-h-[42px] px-3 py-2 bg-white border border-slate-200 rounded-xl text-slate-900 outline-none focus:border-pink-500 focus:ring-4 focus:ring-pink-500/10 transition-all">
+                </div>
+            </div>
+            <div class="grid gap-4 grid-cols-2 mt-2">
+                <div class="grid gap-1.5">
+                    <label for="editPricing" class="text-sm font-bold text-slate-700">Pricing</label>
+                    <input id="editPricing" value="${escapeHtml(company.pricing || "")}" required class="w-full min-h-[42px] px-3 py-2 bg-white border border-slate-200 rounded-xl text-slate-900 outline-none focus:border-pink-500 focus:ring-4 focus:ring-pink-500/10 transition-all">
+                </div>
+                <div class="grid gap-1.5">
+                    <label for="editBillingCycle" class="text-sm font-bold text-slate-700">Billing Cycle</label>
+                    <select id="editBillingCycle" class="w-full min-h-[42px] px-3 py-2 bg-white border border-slate-200 rounded-xl text-slate-900 outline-none focus:border-pink-500 focus:ring-4 focus:ring-pink-500/10 transition-all">
+                        <option value="monthly" ${company.billingCycle === "monthly" ? "selected" : ""}>Monthly</option>
+                        <option value="quarterly" ${company.billingCycle === "quarterly" ? "selected" : ""}>Quarterly</option>
+                        <option value="annual" ${company.billingCycle === "annual" ? "selected" : ""}>Annual</option>
+                    </select>
+                </div>
+            </div>
+            <div class="grid gap-1.5 mt-2">
+                <label for="editStatus" class="text-sm font-bold text-slate-700">Status</label>
+                <select id="editStatus" class="w-full min-h-[42px] px-3 py-2 bg-white border border-slate-200 rounded-xl text-slate-900 outline-none focus:border-pink-500 focus:ring-4 focus:ring-pink-500/10 transition-all">
+                    <option value="active" ${company.status === "active" ? "selected" : ""}>Active</option>
+                    <option value="blocked" ${company.status === "blocked" ? "selected" : ""}>Blocked</option>
+                    <option value="inactive" ${company.status === "inactive" ? "selected" : ""}>Inactive</option>
+                </select>
+            </div>
+            ${renderCompanyModuleToggles(modulesEnabled)}
+            <div id="aiCreditsSection" class="grid gap-3 mt-2">
+                <div class="p-4 rounded-2xl bg-gradient-to-br from-orange-50 to-amber-50 border border-orange-100">
+                    <div class="text-[10px] font-black uppercase tracking-widest text-orange-500 mb-1">AI Module Utilization</div>
+                    <div class="text-2xl font-black text-orange-700">${aiRemaining.toLocaleString("en-IN")}</div>
+                    <div class="text-xs text-orange-500 font-medium mt-1">Credits remaining for AI usage</div>
+                </div>
+                <div class="grid gap-1.5">
+                    <label for="editAiCredits" class="text-sm font-bold text-slate-700">AI Module Credit Allocation</label>
+                    <input id="editAiCredits" type="number" min="0" value="${Number(company.aiCredits || 0)}" class="w-full min-h-[42px] px-3 py-2 bg-white border border-slate-200 rounded-xl text-slate-900 outline-none focus:border-pink-500 focus:ring-4 focus:ring-pink-500/10 transition-all">
+                    <p class="text-xs text-slate-500">Allocated AI credits for this workspace. Use the coins button in the table to adjust remaining balance.</p>
+                </div>
+                <label class="flex items-center gap-2 text-sm text-slate-700">
+                    <input id="resetAiCreditsRemaining" type="checkbox" />
+                    Reset remaining credits to match allocation on save
+                </label>
+            </div>
+        `,
+        onSubmit: async (_e, _form, close) => {
+            const nextModules = readCompanyModuleToggles();
+            await updateCompanyWorkspace(company.id, {
+                companyName: document.getElementById("editCompanyName").value.trim(),
+                userLimit: Number(document.getElementById("editUserLimit").value || 1),
+                jobPostingCredits: Number(document.getElementById("editJobPostingCredits").value || 0),
+                pricing: document.getElementById("editPricing").value.trim(),
+                billingCycle: document.getElementById("editBillingCycle").value,
+                status: document.getElementById("editStatus").value,
+                modulesEnabled: nextModules,
+                aiCredits: Number(document.getElementById("editAiCredits").value || 0),
+                resetAiCreditsRemaining: document.getElementById("resetAiCreditsRemaining")?.checked
+            });
+
+            await loadData();
+            renderShell();
+            toast("Company workspace updated.");
+            close();
+        }
+    });
+
+    setTimeout(() => {
+        bindAiCreditsSection();
+        const section = document.getElementById("aiCreditsSection");
+        if (section && !aiEnabled) {
+            section.classList.add("hidden");
         }
     }, 100);
 }
@@ -2230,7 +2424,11 @@ function showAiCreditsModal(companyId) {
         toast("Company not found.", true);
         return;
     }
-    const currentCredits = Number(company.aiCreditsRemaining || 0);
+    if (!isAiModuleEnabled(company)) {
+        toast("Enable the AI module for this company before managing AI credits.", true);
+        return;
+    }
+    const currentCredits = companyAiCreditsRemaining(company);
 
     openModal({
         title: `Adjust AI Credits — ${company.companyName}`,
@@ -2278,7 +2476,8 @@ function showAiCreditsModal(companyId) {
             }
 
             await updateRecord("companies", companyId, {
-                aiCreditsRemaining: newBalance
+                aiCreditsRemaining: newBalance,
+                aiCredits: Math.max(Number(company.aiCredits || 0), newBalance)
             });
 
             // Also log the adjustment in an activity record

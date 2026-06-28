@@ -2,7 +2,8 @@ export const PERMISSIONS = {
     fullAccess: "full_access",
     hire: "hire",
     perform: "perform",
-    core: "core"
+    core: "core",
+    ai: "ai"
 };
 
 export const ROLE_DEFINITIONS = {
@@ -14,7 +15,7 @@ export const ROLE_DEFINITIONS = {
     hr_operations: {
         id: "hr_operations",
         label: "HR Operations",
-        permissions: [PERMISSIONS.hire, PERMISSIONS.perform, PERMISSIONS.core]
+        permissions: [PERMISSIONS.hire, PERMISSIONS.perform, PERMISSIONS.core, PERMISSIONS.ai]
     },
     recruiter: {
         id: "recruiter",
@@ -26,7 +27,8 @@ export const ROLE_DEFINITIONS = {
 export const MODULE_REQUIREMENTS = {
     hire: [PERMISSIONS.hire],
     perform: [PERMISSIONS.perform],
-    core: [PERMISSIONS.core]
+    core: [PERMISSIONS.core],
+    ai: [PERMISSIONS.ai]
 };
 
 export function getAllRoles() {
